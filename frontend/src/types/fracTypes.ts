@@ -91,55 +91,18 @@ export interface CompletionData {
   records: CompletionRecord[];
 }
 
-export interface CostLineItem {
-  id: string;
-  invoiceNo: string;
-  invoiceAmount: number | null;
-  remarks: string;
-  quantity: number | null;
-  unit: string;
-  unitPrice: number | null;
-  // Total is computed; stored only for convenience in drafts.
-  total: number | null;
-}
-
-export interface SandPlugCost {
-  id: string;
-  invoiceNo: string;
-  invoiceAmount: number | null;
-  pumpingCharge: number | null;
-  relatedCost: number | null;
-  remarks: string;
-}
-
-export interface SimpleCostLine {
-  id: string;
-  description: string;
-  quantity: number | null;
-  unit: string;
-  unitPrice: number | null;
-  total: number | null;
-  remarks: string;
-}
-
 export interface JobCost {
   enabled: boolean;
   skipped: boolean;
-  fracMaterial: CostLineItem[];
-  gelChemicals: CostLineItem[];
-  crossLinkedGel: CostLineItem[];
-  sandPlug: SandPlugCost[];
-  fracEquipment: SimpleCostLine[];
-  fracDHT: SimpleCostLine[];
-  cleanOut: SimpleCostLine[];
-  additional: SimpleCostLine[];
-  /** Complete, column-level Job Cost worksheet entries. */
-  workbookRows: WorkbookCostRow[];
-}
-
-export interface WorkbookCostRow {
-  id: string;
-  values: Record<string, string | number | null>;
+  fracCost: number | null;
+  fracpackCost: number | null;
+  jobOperatingDays: number | null;
+  jobStandbyDays: number | null;
+  acidConsidered: boolean | null;
+  acidCost: number | null;
+  ctCleaningCost: number | null;
+  ctLiftingCost: number | null;
+  additionalCost: number | null;
 }
 
 export interface FracFormData {

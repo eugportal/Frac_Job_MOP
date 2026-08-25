@@ -32,6 +32,15 @@ export async function findSessionUser(username: string, email?: string): Promise
 
 function nullable(value: unknown) { return value === '' || value === undefined ? null : value; }
 function asArray(value: unknown) { return Array.isArray(value) ? value : []; }
+const removedWorkbookKeys = new Set([
+  'youngsModulus', 'minHorizontalStress', 'poissonsRatio',
+  'maxTreatingPressure', 'avgTreatingPressure', 'maxSlurryRate', 'avgSlurryRate', 'miniFracAvgHhp',
+  'minifracBhisip', 'fg', 'cg', 'closurePressure', 'fluidEfficiency',
+]);
+function withoutRemovedWorkbookFields(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).filter(([key]) => !removedWorkbookKeys.has(key)));
+}
 
 async function requireWell(client: PoolClient, companyId: string, wellName: unknown) {
   if (typeof wellName !== 'string' || !wellName.trim()) return null;
@@ -73,7 +82,7 @@ export async function saveFracJob(user: SessionUser, form: any, submit: boolean)
       `insert into public.job_reservoir_details (job_id, formation_name, lithology, well_type, pad_percent, mid_perf_tvd, number_of_perforations, max_deviation, average_reservoir_pressure, bhst, average_porosity, workbook_data)
        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
        on conflict (job_id) do update set formation_name=excluded.formation_name, lithology=excluded.lithology, well_type=excluded.well_type, pad_percent=excluded.pad_percent, mid_perf_tvd=excluded.mid_perf_tvd, number_of_perforations=excluded.number_of_perforations, max_deviation=excluded.max_deviation, average_reservoir_pressure=excluded.average_reservoir_pressure, bhst=excluded.bhst, average_porosity=excluded.average_porosity, workbook_data=excluded.workbook_data`,
-      [jobId, nullable(reservoir.formationName), nullable(reservoir.lithology), nullable(reservoir.wellType), nullable(reservoir.padPercent), nullable(reservoir.midPerfTVD), nullable(reservoir.numberOfPerfs), nullable(reservoir.maxDeviation), nullable(reservoir.averageReservoirPressure), nullable(reservoir.bhst), nullable(reservoir.averagePorosity), JSON.stringify({ ...main.workbookFields, wellEug: wellInfo.wellEug, field: wellInfo.field, regionArea: wellInfo.regionArea, latitude: wellInfo.latitude, longitude: wellInfo.longitude, onOffShore: wellInfo.onOffShore, rigName: wellInfo.rigName, reports })],
+      [jobId, nullable(reservoir.formationName), nullable(reservoir.lithology), nullable(reservoir.wellType), nullable(reservoir.padPercent), nullable(reservoir.midPerfTVD), nullable(reservoir.numberOfPerfs), nullable(reservoir.maxDeviation), nullable(reservoir.averageReservoirPressure), nullable(reservoir.bhst), nullable(reservoir.averagePorosity), JSON.stringify({ ...withoutRemovedWorkbookFields(main.workbookFields), wellEug: wellInfo.wellEug, field: wellInfo.field, regionArea: wellInfo.regionArea, latitude: wellInfo.latitude, longitude: wellInfo.longitude, onOffShore: wellInfo.onOffShore, rigName: wellInfo.rigName, reports })],
     );
     await client.query('delete from public.job_stages where job_id = $1', [jobId]);
     for (const stage of asArray(main.stages)) await client.query(
@@ -86,19 +95,18 @@ export async function saveFracJob(user: SessionUser, form: any, submit: boolean)
        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
       [jobId, record.wellNameUWI || wellInfo.well || 'Not provided', record.wellType || 'Not provided', nullable(record.casingSize), nullable(record.tubingDPSize), nullable(record.tubingDPGrade), nullable(record.perfIntervalTop), nullable(record.perfIntervalBottom), nullable(record.entranceHoleSize), nullable(record.completionType), nullable(record.priorWorkovers), nullable(record.tripleCompoLog), nullable(record.cpiLog), JSON.stringify(record.workbookFields ?? {})],
     );
-    await client.query('delete from public.job_cost_lines where job_id = $1', [jobId]);
-    const categories: Array<[string, string]> = [['fracMaterial', 'frac_material'], ['gelChemicals', 'gel_chemicals'], ['crossLinkedGel', 'cross_linked_gel'], ['sandPlug', 'sand_plug'], ['fracEquipment', 'frac_equipment'], ['fracDHT', 'frac_dht'], ['cleanOut', 'clean_out'], ['additional', 'additional']];
-    for (const [key, category] of categories) for (const [index, line] of asArray(jobCost[key]).entries()) await client.query(
-      `insert into public.job_cost_lines (job_id, category, sort_order, invoice_no, description, invoice_amount, quantity, unit, unit_price, pumping_charge, related_cost, remarks)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-      [jobId, category, index, nullable(line.invoiceNo), nullable(line.description), nullable(line.invoiceAmount), nullable(line.quantity), nullable(line.unit), nullable(line.unitPrice), nullable(line.pumpingCharge), nullable(line.relatedCost), nullable(line.remarks)],
+    await client.query(
+      `insert into public.job_cost_details (job_id, frac_cost, fracpack_cost, job_operating_days, job_standby_days, acid_considered, acid_cost, ct_cleaning_cost, ct_lifting_cost, additional_cost)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       on conflict (job_id) do update set frac_cost=excluded.frac_cost, fracpack_cost=excluded.fracpack_cost, job_operating_days=excluded.job_operating_days, job_standby_days=excluded.job_standby_days, acid_considered=excluded.acid_considered, acid_cost=excluded.acid_cost, ct_cleaning_cost=excluded.ct_cleaning_cost, ct_lifting_cost=excluded.ct_lifting_cost, additional_cost=excluded.additional_cost`,
+      [jobId, nullable(jobCost.fracCost), nullable(jobCost.fracpackCost), nullable(jobCost.jobOperatingDays), nullable(jobCost.jobStandbyDays), jobCost.acidConsidered ?? null, nullable(jobCost.acidCost), nullable(jobCost.ctCleaningCost), nullable(jobCost.ctLiftingCost), nullable(jobCost.additionalCost)],
     );
-    await client.query('delete from public.job_cost_workbook_rows where job_id = $1', [jobId]);
-    for (const [index, row] of asArray(jobCost.workbookRows).entries()) await client.query('insert into public.job_cost_workbook_rows (job_id, sort_order, values) values ($1,$2,$3)', [jobId, index, JSON.stringify(row.values ?? {})]);
     if (submit && !job.rows[0].reference) await client.query(`update public.frac_jobs set reference = 'FRAC-' || to_char(now(), 'YYYYMMDD') || '-' || upper(substr(replace(id::text, '-', ''), 1, 6)) where id = $1`, [jobId]);
     const final = await client.query<{ reference: string; submitted_at: string | null }>('select reference, submitted_at from public.frac_jobs where id = $1', [jobId]);
     await client.query('commit');
-    return { formId: jobId, reference: final.rows[0].reference, submittedAt: final.rows[0].submitted_at, company: user.companyName, well: wellInfo.well ?? '', jobDate: wellInfo.jobDate ?? '', jobTotal: asArray(jobCost.fracMaterial).concat(asArray(jobCost.gelChemicals), asArray(jobCost.crossLinkedGel), asArray(jobCost.sandPlug)).reduce((sum: number, line: any) => sum + Number(line.invoiceAmount ?? 0) + Number(line.pumpingCharge ?? 0) + Number(line.relatedCost ?? 0), 0) + ['fracEquipment','fracDHT','cleanOut','additional'].flatMap((key) => asArray(jobCost[key])).reduce((sum: number, line: any) => sum + Number(line.total ?? ((Number(line.quantity) || 0) * (Number(line.unitPrice) || 0))), 0) };
+    const jobTotal = ['fracCost', 'fracpackCost', 'acidCost', 'ctCleaningCost', 'ctLiftingCost', 'additionalCost']
+      .reduce((sum, key) => sum + (Number(jobCost[key]) || 0), 0);
+    return { formId: jobId, reference: final.rows[0].reference, submittedAt: final.rows[0].submitted_at, company: user.companyName, well: wellInfo.well ?? '', jobDate: wellInfo.jobDate ?? '', jobTotal: Math.round(jobTotal * 100) / 100 };
   } catch (error) {
     await client.query('rollback').catch(() => undefined);
     throw error;

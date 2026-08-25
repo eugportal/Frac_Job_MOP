@@ -13,8 +13,7 @@ This project is a Vite/React client with local browser persistence only. `databa
 | `ReservoirInfo` and main workbook fields | `job_reservoir_details` | Named analytical columns are relational; workbook-only data is version-tolerant JSONB. |
 | `StageRecord` | `job_stages` | One job has many ordered stages. |
 | `CompletionRecord` and completion workbook fields | `job_completion_records` | One job has many completion records. |
-| All job-cost line types | `job_cost_lines` | A category enum handles the eight UI cost categories; `item_type` holds proppant/gel type currently stored in `remarks`. |
-| Job-cost workbook rows | `job_cost_workbook_rows` | JSONB retains all workbook columns without a brittle 100-column table. |
+| Job cost | `job_cost_details` | One record per job: Frac and Fracpack costs, operating/standby days, acid flag/cost, CT costs, additional cost, and a calculated total. |
 | Form reference/status/timestamps | `frac_jobs` | Draft and submitted forms use the same record, so autosave is durable. |
 
 ## Explicitly not imported
@@ -25,7 +24,7 @@ Do not import `COMPANY_CREDENTIALS`. The current password formula is public in t
 
 ## Apply and seed
 
-1. Apply `database/migrations/20260821_001_initial_schema.sql`.
+1. Apply `database/migrations/20260821_001_initial_schema.sql`, then `database/migrations/20260823_002_one_company_per_user.sql`, `database/migrations/20260826_003_replace_job_cost_section.sql`, and `database/migrations/20260826_004_remove_rock_and_mini_frac_fields.sql`.
 2. Apply `database/seed/lookup_options.sql`.
 3. Generate and apply company/well data:
 
@@ -42,7 +41,7 @@ node scripts/generate-company-well-seed.mjs > database/seed/companies_and_wells.
 The SQL Server scripts use the `dbo` schema, `uniqueidentifier`, `datetime2(3)`, `bit`, and `nvarchar(max)` JSON columns. They require SQL Server 2016 SP1 or later because the schema validates JSON with `ISJSON`.
 
 1. Run `database/migration_mssql/20260821_001_initial_schema.sql`.
-2. Run `database/migration_mssql/20260823_002_one_company_per_user.sql` when upgrading an earlier schema; it is safe after the baseline too.
+2. Run `database/migration_mssql/20260823_002_one_company_per_user.sql`, `database/migration_mssql/20260826_003_replace_job_cost_section.sql`, and `database/migration_mssql/20260826_004_remove_rock_and_mini_frac_fields.sql`.
 3. Run `database/seed_mssql/lookup_options.sql`.
 4. Run `database/seed_mssql/companies_and_wells.sql`. Regenerate it after changes to `frontend/src/data/authCompanies.ts`:
 

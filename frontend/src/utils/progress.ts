@@ -52,19 +52,12 @@ export function computeProgress(data: FracFormData): ProgressResult {
     jobCost = 100;
     jobCostStatus = 'skipped';
   } else if (data.jobCost.enabled) {
-    const categories = [
-      data.jobCost.fracMaterial,
-      data.jobCost.gelChemicals,
-      data.jobCost.crossLinkedGel,
-      data.jobCost.sandPlug,
-      data.jobCost.fracEquipment,
-      data.jobCost.fracDHT,
-      data.jobCost.cleanOut,
-      data.jobCost.additional,
-    ];
-    const totalLines = categories.reduce((s, c) => s + c.length, 0);
-    jobCost = totalLines > 0 ? 100 : 0;
-    jobCostStatus = totalLines > 0 ? 'complete' : 'in-progress';
+    const values = [data.jobCost.fracCost, data.jobCost.fracpackCost, data.jobCost.jobOperatingDays,
+      data.jobCost.jobStandbyDays, data.jobCost.acidConsidered, data.jobCost.acidCost,
+      data.jobCost.ctCleaningCost, data.jobCost.ctLiftingCost, data.jobCost.additionalCost];
+    const filled = values.filter((value) => value !== null).length;
+    jobCost = Math.round((filled / values.length) * 100);
+    jobCostStatus = filled === values.length ? 'complete' : 'in-progress';
   }
 
   // Overall: main weighted 60%, completion 20%, jobCost 20%. Skipped/optional sections count as complete.

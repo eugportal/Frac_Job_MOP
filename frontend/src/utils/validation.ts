@@ -105,19 +105,16 @@ export function validateForm(data: FracFormData): ValidationResult {
   // Job cost validation: entered numeric values should be non-negative
   if (data.jobCost.enabled && !data.jobCost.skipped) {
     const section = 'Job Cost';
-    const checkLine = (qty: number | null, price: number | null, label: string, idx: number) => {
-      if (qty !== null && qty < 0)
-        errors.push({ field: `jobCost.${label}[${idx}].quantity`, label: `${label} Quantity`, section, message: `${label} record ${idx + 1}: Quantity cannot be negative.` });
-      if (price !== null && price < 0)
-        errors.push({ field: `jobCost.${label}[${idx}].unitPrice`, label: `${label} Unit Price`, section, message: `${label} record ${idx + 1}: Unit Price cannot be negative.` });
-    };
-    data.jobCost.fracMaterial.forEach((l, i) => checkLine(l.quantity, l.unitPrice, 'Frac Material', i));
-    data.jobCost.gelChemicals.forEach((l, i) => checkLine(l.quantity, l.unitPrice, 'Gel / Chemicals', i));
-    data.jobCost.crossLinkedGel.forEach((l, i) => checkLine(l.quantity, l.unitPrice, 'Crosslinked Gel', i));
-    data.jobCost.fracEquipment.forEach((l, i) => checkLine(l.quantity, l.unitPrice, 'Frac Equipment', i));
-    data.jobCost.fracDHT.forEach((l, i) => checkLine(l.quantity, l.unitPrice, 'Frac DHT', i));
-    data.jobCost.cleanOut.forEach((l, i) => checkLine(l.quantity, l.unitPrice, 'Clean Out', i));
-    data.jobCost.additional.forEach((l, i) => checkLine(l.quantity, l.unitPrice, 'Additional', i));
+    const values: Array<[keyof typeof data.jobCost, string]> = [
+      ['fracCost', 'Frac Cost'], ['fracpackCost', 'Fracpack Cost'], ['jobOperatingDays', 'Job Operating Days'],
+      ['jobStandbyDays', 'Job Standby Days'], ['acidCost', 'Acid Cost'], ['ctCleaningCost', 'CT Cleaning Cost'],
+      ['ctLiftingCost', 'CT/Lifting Cost'], ['additionalCost', 'Additional Cost'],
+    ];
+    values.forEach(([field, label]) => {
+      const value = data.jobCost[field];
+      if (typeof value === 'number' && value < 0)
+        errors.push({ field: `jobCost.${field}`, label, section, message: `${label} cannot be negative.` });
+    });
   }
 
   return { errors, isValid: errors.length === 0 };
