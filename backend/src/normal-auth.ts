@@ -83,3 +83,29 @@ export async function createNormalUser(input: CreateNormalUserInput) {
     client.release();
   }
 }
+
+export async function updateNormalUser(id: string, input: Omit<CreateNormalUserInput, 'createdByUsername'>) {
+  const passwordHash = await bcrypt.hash(input.password, 12);
+  const client = await database.connect();
+  try {
+    await client.query('begin');
+    const updated = await client.query<{ id: string; username: string; email: string }>(
+      `update public.app_users set username=$2, email=$3, password_hash=$4, auth_method='normal' where id=$1 and not is_superuser returning id, username, email`,
+      [id, input.username, input.email, passwordHash],
+    );
+    if (!updated.rows[0]) throw new UserManagementError(404, 'User not found.');
+    await client.query('update public.company_memberships set company_id=$2, role=$3 where user_id=$1', [id, input.companyId, input.role]);
+    await client.query('commit');
+    return updated.rows[0];
+  } catch (error) {
+    await client.query('rollback').catch(() => undefined);
+    if (error instanceof UserManagementError) throw error;
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === '23505') throw new UserManagementError(409, 'A user with that username or email already exists.');
+    throw error;
+  } finally { client.release(); }
+}
+
+export async function deleteNormalUser(id: string) {
+  const result = await database.query('delete from public.app_users where id=$1 and not is_superuser', [id]);
+  if (!result.rowCount) throw new UserManagementError(404, 'User not found.');
+}

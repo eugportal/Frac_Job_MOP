@@ -9,7 +9,7 @@ import path from 'node:path';
 import { validateReportFile } from './file-validation.js';
 import { z } from 'zod';
 import { config } from './config.js';
-import { authenticateNormally, createNormalUser, UserManagementError } from './normal-auth.js';
+import { authenticateNormally, createNormalUser, deleteNormalUser, updateNormalUser, UserManagementError } from './normal-auth.js';
 import { LookupAdminError, createLookup, deleteLookup, importLookupWorkbook, listAdminLookupData, updateLookup } from './admin-lookups.js';
 import { sendOtpEmail } from './mailer.js';
 import { createOtpChallenge, verifyOtpChallenge } from './otp.js';
@@ -111,14 +111,56 @@ app.post('/api/frac-jobs/drafts', async (request, response, next) => {
   const user = authenticatedSession(request);
   if (!user) return response.status(401).json({ message: 'Invalid or expired bearer token.' });
   if (user.role === 'viewer') return response.status(403).json({ message: 'Viewers cannot save forms.' });
-  try { return response.status(200).json({ job: await saveFracJob(user, request.body, false) }); } catch (error) { next(error); }
+  try { return response.status(200).json({ job: await saveFracJob(user, request.body, false, true) }); } catch (error) { next(error); }
 });
 
 app.post('/api/frac-jobs/submit', async (request, response, next) => {
   const user = authenticatedSession(request);
   if (!user) return response.status(401).json({ message: 'Invalid or expired bearer token.' });
   if (user.role === 'viewer') return response.status(403).json({ message: 'Viewers cannot submit forms.' });
-  try { return response.status(201).json({ job: await saveFracJob(user, request.body, true) }); } catch (error) { next(error); }
+  try { return response.status(201).json({ job: await saveFracJob(user, request.body, true, true) }); } catch (error) { next(error); }
+});
+
+function jobScope(user: SessionUser) { return user.isSuperuser ? { clause: '', values: [] as string[] } : { clause: ' and j.company_id = $1', values: [user.companyId] }; }
+
+app.get('/api/frac-jobs/submissions', async (request, response, next) => {
+  const user = authenticatedSession(request);
+  if (!user) return response.status(401).json({ message: 'Invalid or expired bearer token.' });
+  const scope = jobScope(user);
+  try {
+    const jobs = await database.query<{ id: string; reference: string | null; status: string; job_date: string | null; submitted_at: string | null; company: string; well: string | null; submitted_by: string | null }>(
+      `select j.id, j.reference, j.status, j.job_date, j.submitted_at, c.name as company, w.name as well, submitter.username as submitted_by
+         from public.frac_jobs j join public.companies c on c.id=j.company_id left join public.wells w on w.id=j.well_id left join public.app_users submitter on submitter.id=j.submitted_by
+        where j.status = 'submitted'${scope.clause} order by j.submitted_at desc nulls last`, scope.values,
+    );
+    const documents = await database.query<{ job_id: string; document_type: string; original_name: string | null }>(
+      `select d.job_id, d.document_type, d.original_name from public.job_documents d join public.frac_jobs j on j.id=d.job_id where j.status='submitted'${user.isSuperuser ? '' : ' and j.company_id=$1'}`, scope.values,
+    );
+    const byJob = new Map<string, Array<{ type: string; name: string | null }>>();
+    for (const document of documents.rows) byJob.set(document.job_id, [...(byJob.get(document.job_id) ?? []), { type: document.document_type, name: document.original_name }]);
+    return response.status(200).json({ submissions: jobs.rows.map((job) => ({ ...job, documents: byJob.get(job.id) ?? [] })) });
+  } catch (error) { next(error); }
+});
+
+app.get('/api/frac-jobs/:jobId/documents/:documentType/download', async (request, response, next) => {
+  const user = authenticatedSession(request);
+  if (!user) return response.status(401).json({ message: 'Invalid or expired bearer token.' });
+  const jobId = typeof request.params.jobId === 'string' ? request.params.jobId : '';
+  const documentType = typeof request.params.documentType === 'string' ? request.params.documentType : '';
+  if (!/^[0-9a-f-]{36}$/i.test(jobId) || !documentTypes[documentType as keyof typeof documentTypes]) return response.status(404).json({ message: 'Document not found.' });
+  try {
+    const document = await database.query<{ storage_path: string | null; original_name: string | null; mime_type: string | null }>(
+      `select d.storage_path, d.original_name, d.mime_type from public.job_documents d join public.frac_jobs j on j.id=d.job_id where d.job_id=$1 and d.document_type=$2${user.isSuperuser ? '' : ' and j.company_id=$3'}`,
+      user.isSuperuser ? [jobId, documentType] : [jobId, documentType, user.companyId],
+    );
+    const row = document.rows[0];
+    if (!row?.storage_path) return response.status(404).json({ message: 'Document not found.' });
+    const uploadsRoot = path.resolve(process.cwd(), 'uploads');
+    const filePath = path.resolve(process.cwd(), row.storage_path);
+    if (!filePath.startsWith(`${uploadsRoot}${path.sep}`)) return response.status(404).json({ message: 'Document not found.' });
+    response.type(row.mime_type ?? 'application/octet-stream');
+    return response.download(filePath, row.original_name ?? 'report');
+  } catch (error) { next(error); }
 });
 
 app.get('/api/companies/me/wells', async (request, response, next) => {
@@ -154,6 +196,24 @@ function requireSuperuser(request: Request, response: Response) {
   if (!user.isSuperuser) { response.status(403).json({ message: 'Superadmin access is required.' }); return null; }
   return user;
 }
+
+app.get('/api/admin/users', async (request, response, next) => {
+  if (!requireSuperuser(request, response)) return;
+  try {
+    const result = await database.query<{ id: string; username: string; email: string; company_id: string; company: string; role: 'admin' | 'editor' | 'viewer' }>(
+      `select u.id, u.username, u.email, m.company_id, c.name as company, m.role from public.app_users u join public.company_memberships m on m.user_id=u.id join public.companies c on c.id=m.company_id where not u.is_superuser order by c.name, u.username`,
+    );
+    return response.status(200).json({ users: result.rows });
+  } catch (error) { next(error); }
+});
+app.put('/api/admin/users/:id', adminLimiter, async (request, response, next) => {
+  if (!requireSuperuser(request, response)) return;
+  try { const input = createUserRequest.parse(request.body); return response.status(200).json({ user: await updateNormalUser(String(request.params.id), input) }); } catch (error) { next(error); }
+});
+app.delete('/api/admin/users/:id', adminLimiter, async (request, response, next) => {
+  if (!requireSuperuser(request, response)) return;
+  try { await deleteNormalUser(String(request.params.id)); return response.status(204).end(); } catch (error) { next(error); }
+});
 
 app.get('/api/admin/lookup-data', async (request, response, next) => {
   if (!requireSuperuser(request, response)) return;

@@ -35,7 +35,7 @@ export function ConfirmationDialog({
           </button>
           <button
             type="button"
-            className={variant === 'danger' ? 'btn bg-red-600 text-white shadow-sm hover:bg-red-700' : 'btn-primary'}
+            className={variant === 'danger' ? 'btn bg-red-600 text-white shadow-sm hover:bg-red-700' : 'btn-danger'}
             onClick={onConfirm}
           >
             {confirmLabel}

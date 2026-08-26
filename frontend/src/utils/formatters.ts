@@ -39,7 +39,7 @@ export function formatDateTime(value: string | null | undefined): string {
 }
 
 export function generateId(): string {
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  return crypto.randomUUID();
 }
 
 export function generateReferenceNumber(): string {

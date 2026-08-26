@@ -282,7 +282,7 @@ function StageModal({ open, stage, nextStageNumber, onClose, onSave }: StageModa
           <button type="button" className="btn-secondary" onClick={onClose}>
             Cancel
           </button>
-          <button type="button" className="btn-primary" onClick={() => onSave(draft)}>
+          <button type="button" className="btn-danger" onClick={() => onSave(draft)}>
             <Pencil size={14} />
             Save Stage
           </button>

@@ -167,7 +167,7 @@ export function FracDataForm({ company, accessToken, onLogout, themeToggle }: Fr
                 <Save size={16} />
                 Save Draft
               </button>
-              <button type="button" onClick={handleSubmitClick} className="btn-primary">
+              <button type="button" onClick={handleSubmitClick} className="btn-danger">
                 <Send size={16} />
                 Submit
               </button>
@@ -274,13 +274,13 @@ export function FracDataForm({ company, accessToken, onLogout, themeToggle }: Fr
                 <button
                   type="button"
                   onClick={() => setOpenId(openId === 'main' ? 'completion' : 'jobCost')}
-                  className="btn-primary"
+                  className="btn-danger"
                 >
                   Continue
                   <ChevronRight size={16} />
                 </button>
               ) : (
-                <button type="button" onClick={handleSubmitClick} className="btn-primary">
+                <button type="button" onClick={handleSubmitClick} className="btn-danger">
                   <Send size={16} />
                   Submit
                 </button>
@@ -302,7 +302,7 @@ export function FracDataForm({ company, accessToken, onLogout, themeToggle }: Fr
               <ChevronLeft size={16} />
               Back to Form
             </button>
-            <button type="button" className="btn-primary" onClick={confirmSubmit}>
+            <button type="button" className="btn-danger" onClick={confirmSubmit}>
               <ClipboardCheck size={16} />
               Confirm & Submit
             </button>
@@ -546,7 +546,7 @@ function SuccessScreen({ submission, onNewForm }: { submission: SubmissionResult
             <FileText size={16} />
             View Summary
           </button>
-          <button type="button" className="btn-primary" onClick={onNewForm}>
+          <button type="button" className="btn-danger" onClick={onNewForm}>
             <PlusCircle size={16} />
             Create New Form
           </button>

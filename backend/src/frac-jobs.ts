@@ -56,7 +56,7 @@ async function requireField(client: PoolClient, companyId: string, fieldName: un
   return result.rows[0].id;
 }
 
-export async function saveFracJob(user: SessionUser, form: any, submit: boolean) {
+export async function saveFracJob(user: SessionUser, form: any, submit: boolean, allowSubmittedEdit = false) {
   const main = form.mainFracData ?? {};
   const wellInfo = main.wellInfo ?? {};
   const reports = main.reports ?? {};
@@ -68,10 +68,10 @@ export async function saveFracJob(user: SessionUser, form: any, submit: boolean)
   try {
     await client.query('begin');
     const existing = await client.query<{ id: string; status: string }>('select id, status from public.frac_jobs where id = $1', [jobId]);
-    if (existing.rows[0]?.status === 'submitted') throw new FracJobError(409, 'Submitted forms cannot be changed.');
+    if (existing.rows[0]?.status === 'submitted' && !allowSubmittedEdit) throw new FracJobError(409, 'Submitted forms cannot be changed.');
     const wellId = await requireWell(client, user.companyId, wellInfo.well);
     const fieldId = await requireField(client, user.companyId, wellInfo.field);
-    const status = submit ? 'submitted' : (form.status === 'in-progress' ? 'in_progress' : 'draft');
+    const status = existing.rows[0]?.status === 'submitted' ? 'submitted' : (submit ? 'submitted' : (form.status === 'in-progress' ? 'in_progress' : 'draft'));
     const job = await client.query<{ id: string; reference: string | null; submitted_at: string | null }>(
       `insert into public.frac_jobs (id, company_id, well_id, field_id, status, job_date, submitted_at, submitted_by, created_by,
            data_source_confidence, frac_vendor, technique, job_cost_enabled, job_cost_skipped, completion_enabled, completion_skipped)

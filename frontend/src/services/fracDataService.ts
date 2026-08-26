@@ -10,7 +10,7 @@ import {
   saveDraftToStorage,
 } from '@/utils/storage';
 
-const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:3001').replace(/\/$/, '');
+const apiUrl = (import.meta.env.VITE_API_URL ?? '/api/frac').replace(/\/$/, '');
 
 async function saveToApi(accessToken: string, path: string, data: FracFormData): Promise<SubmissionResult> {
   const { jobDesignReportAttachment, postFracReportAttachment, ...reports } = data.mainFracData.reports;
