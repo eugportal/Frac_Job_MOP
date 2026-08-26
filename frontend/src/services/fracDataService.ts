@@ -1,6 +1,6 @@
 // Service abstraction. Initially backed by localStorage; a future API can replace these implementations.
 
-import type { FracDataService, FracFormData, SubmissionResult } from '@/types/fracTypes';
+import type { DocumentAttachment, FracDataService, FracFormData, SubmissionResult } from '@/types/fracTypes';
 import { computeJobCostBreakdown } from '@/utils/calculations';
 import { generateReferenceNumber } from '@/utils/formatters';
 import {
@@ -29,16 +29,20 @@ function stripFile(attachment: FracFormData['mainFracData']['reports']['jobDesig
 }
 
 async function uploadSelectedReports(accessToken: string, jobId: string, data: FracFormData) {
-  const documents: Array<[string, File | undefined]> = [
-    ['job_design_report', data.mainFracData.reports.jobDesignReportAttachment?.file],
-    ['post_frac_report', data.mainFracData.reports.postFracReportAttachment?.file],
+  const documents: Array<[string, DocumentAttachment | null, string]> = [
+    ['job_design_report', data.mainFracData.reports.jobDesignReportAttachment, 'Job Design Report'],
+    ['post_frac_report', data.mainFracData.reports.postFracReportAttachment, 'Post Frac Report'],
   ];
-  for (const [type, file] of documents) {
-    if (!file) continue;
+  for (const [type, attachment, label] of documents) {
+    if (!attachment) continue;
+    const file = attachment.file;
+    if (!(file instanceof Blob)) throw new Error(`${label} must be selected again before uploading. Browser drafts retain file details, not the file itself.`);
+    const body = new FormData();
+    body.append('reportFile', file, attachment.name);
     const response = await fetch(`${apiUrl}/api/frac-jobs/${jobId}/documents/${type}`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': file.type || 'application/octet-stream', 'X-File-Name': encodeURIComponent(file.name) },
-      body: file,
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body,
     });
     if (!response.ok) {
       const payload = await response.json().catch(() => ({})) as { message?: string };
@@ -49,10 +53,10 @@ async function uploadSelectedReports(accessToken: string, jobId: string, data: F
 
 export function createFracDataService(accessToken: string): FracDataService {
   return {
-    async saveDraft(data) { await saveToApi(accessToken, '/api/frac-jobs/drafts', data); await uploadSelectedReports(accessToken, data.formId, data); },
+    async saveDraft(data) { const job = await saveToApi(accessToken, '/api/frac-jobs/drafts', data); await uploadSelectedReports(accessToken, job.formId, data); },
     async loadDraft() { return null; },
     async clearDraft() { clearDraftFromStorage(); },
-    async submit(data) { const job = await saveToApi(accessToken, '/api/frac-jobs/submit', data); await uploadSelectedReports(accessToken, data.formId, data); clearDraftFromStorage(); return job; },
+    async submit(data) { const job = await saveToApi(accessToken, '/api/frac-jobs/submit', data); await uploadSelectedReports(accessToken, job.formId, data); clearDraftFromStorage(); return job; },
   };
 }
 

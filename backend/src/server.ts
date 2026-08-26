@@ -3,8 +3,10 @@ import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import jwt from 'jsonwebtoken';
+import multer, { MulterError } from 'multer';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { validateReportFile } from './file-validation.js';
 import { z } from 'zod';
 import { config } from './config.js';
 import { authenticateNormally, createNormalUser, UserManagementError } from './normal-auth.js';
@@ -189,34 +191,41 @@ const documentTypes = {
   post_frac_report: { directory: 'Post Frac Report', prefix: 'post_frac' },
 } as const;
 
-app.post('/api/frac-jobs/:jobId/documents/:documentType', express.raw({ type: () => true, limit: '50mb' }), async (request, response, next) => {
+const reportUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024, files: 1 },
+});
+
+app.post('/api/frac-jobs/:jobId/documents/:documentType', reportUpload.single('reportFile'), async (request, response, next) => {
   const user = authenticatedSession(request);
   if (!user) return response.status(401).json({ message: 'Invalid or expired bearer token.' });
   if (user.role === 'viewer') return response.status(403).json({ message: 'Viewers cannot upload documents.' });
+  const jobId = typeof request.params.jobId === 'string' ? request.params.jobId : '';
   const documentType = request.params.documentType as keyof typeof documentTypes;
   const definition = documentTypes[documentType];
-  if (!definition || !/^[0-9a-f-]{36}$/i.test(request.params.jobId) || !Buffer.isBuffer(request.body) || request.body.length === 0) return response.status(400).json({ message: 'A valid report file is required.' });
+  const reportFile = request.file;
+  if (!definition || !/^[0-9a-f-]{36}$/i.test(jobId) || !reportFile?.buffer?.length) return response.status(400).json({ message: 'A valid report file is required.' });
   try {
     const job = await database.query<{ well_name: string }>(
       'select w.name as well_name from public.frac_jobs j join public.wells w on w.id = j.well_id where j.id = $1 and j.company_id = $2',
-      [request.params.jobId, user.companyId],
+      [jobId, user.companyId],
     );
     if (!job.rows[0]) return response.status(404).json({ message: 'Job not found for your company.' });
-    const originalName = decodeURIComponent(request.header('x-file-name') ?? 'report');
+    const originalName = path.basename(reportFile.originalname);
     const extension = path.extname(originalName).toLowerCase();
-    if (!['.pdf', '.doc', '.docx', '.xls', '.xlsx'].includes(extension)) return response.status(400).json({ message: 'Only PDF, Word, and Excel report files are allowed.' });
+    try { await validateReportFile(originalName, reportFile.buffer); } catch (error) { return response.status(400).json({ message: error instanceof Error ? error.message : 'The uploaded file is invalid.' }); }
     const safeWell = job.rows[0].well_name.replace(/[^a-z0-9_-]/gi, '_');
     const timestamp = new Date().toISOString().replace(/[-:.TZ]/g, '');
     const fileName = `${definition.prefix}_${safeWell}_${timestamp}${extension}`;
     const directory = path.resolve(process.cwd(), 'uploads', definition.directory);
     await mkdir(directory, { recursive: true });
-    await writeFile(path.join(directory, fileName), request.body, { flag: 'wx' });
+    await writeFile(path.join(directory, fileName), reportFile.buffer, { flag: 'wx' });
     const storagePath = path.posix.join('uploads', definition.directory, fileName);
     await database.query(
       `insert into public.job_documents (job_id, document_type, storage_path, original_name, mime_type, byte_size, uploaded_by)
        values ($1,$2,$3,$4,$5,$6,$7)
        on conflict (job_id, document_type) do update set storage_path=excluded.storage_path, original_name=excluded.original_name, mime_type=excluded.mime_type, byte_size=excluded.byte_size, uploaded_by=excluded.uploaded_by, created_at=now()`,
-      [request.params.jobId, documentType, storagePath, originalName, request.header('content-type') ?? 'application/octet-stream', request.body.length, user.id],
+      [jobId, documentType, storagePath, originalName, reportFile.mimetype || 'application/octet-stream', reportFile.size, user.id],
     );
     return response.status(201).json({ storagePath, fileName });
   } catch (error) { next(error); }
@@ -234,6 +243,10 @@ app.get('/api/auth/me', (request, response) => {
 });
 
 app.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
+  if (error instanceof MulterError) {
+    if (error.code === 'LIMIT_FILE_SIZE') return response.status(400).json({ message: 'Report files must be 50 MB or smaller.' });
+    return response.status(400).json({ message: 'Upload exactly one report file.' });
+  }
   if (error instanceof z.ZodError) return response.status(400).json({ message: 'Invalid request.', issues: error.flatten() });
   if (error instanceof UserManagementError) return response.status(error.statusCode).json({ message: error.message });
   if (error instanceof LookupAdminError) return response.status(error.statusCode).json({ message: error.message });

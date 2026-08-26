@@ -7,7 +7,6 @@ import { TextField } from '@/components/FormField/TextField';
 import { NumberField } from '@/components/FormField/NumberField';
 import { DateField } from '@/components/FormField/DateField';
 import { SelectField } from '@/components/FormField/SelectField';
-import { RadioGroup } from '@/components/FormField/RadioGroup';
 import { Modal } from '@/components/Modal/Modal';
 import { ConfirmationDialog } from '@/components/Modal/ConfirmationDialog';
 import { WorkbookFieldGrid } from '@/components/FormField/WorkbookFieldGrid';
@@ -154,18 +153,10 @@ export function MainFracDataSection({ accessToken, formData, setFormData, errors
         <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-ink-500">Reports & Documentation</h3>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="flex flex-col gap-2">
-            <RadioGroup label="Job Design Report" name="jobDesignReport" value={rep.jobDesignReport} onChange={(v) => {
-              updateReports('jobDesignReport', v);
-              if (!v) updateReports('jobDesignReportAttachment', null);
-            }} />
-            {rep.jobDesignReport && <DocumentUpload name="jobDesignReportFile" attachment={rep.jobDesignReportAttachment} onChange={(file) => updateReportAttachment('jobDesignReportAttachment', file)} />}
+            <DocumentUpload label="Job Design Report" name="jobDesignReportFile" attachment={rep.jobDesignReportAttachment} onChange={(file) => { updateReports('jobDesignReport', !!file); updateReportAttachment('jobDesignReportAttachment', file); }} />
           </div>
           <div className="flex flex-col gap-2">
-            <RadioGroup label="Post Frac Report" name="postFracReport" value={rep.postFracReport} onChange={(v) => {
-              updateReports('postFracReport', v);
-              if (!v) updateReports('postFracReportAttachment', null);
-            }} />
-            {rep.postFracReport && <DocumentUpload name="postFracReportFile" attachment={rep.postFracReportAttachment} onChange={(file) => updateReportAttachment('postFracReportAttachment', file)} />}
+            <DocumentUpload label="Post Frac Report" name="postFracReportFile" attachment={rep.postFracReportAttachment} onChange={(file) => { updateReports('postFracReport', !!file); updateReportAttachment('postFracReportAttachment', file); }} />
           </div>
           <SelectField label="Technique" name="technique" value={rep.technique} options={techniquesByVendor[w.fracVendor] ?? []} placeholder={w.fracVendor ? 'Select technique' : 'Select a frac vendor first'} disabled={!w.fracVendor} onChange={(v) => updateReports('technique', v)} />
         </div>
@@ -236,10 +227,10 @@ export function MainFracDataSection({ accessToken, formData, setFormData, errors
   );
 }
 
-function DocumentUpload({ name, attachment, onChange }: { name: string; attachment: DocumentAttachment | null; onChange: (file: File | null) => void }) {
+function DocumentUpload({ label, name, attachment, onChange }: { label: string; name: string; attachment: DocumentAttachment | null; onChange: (file: File | null) => void }) {
   return (
     <div className="rounded-lg border border-dashed border-brand-300 bg-brand-50 p-3">
-      <label className="field-label" htmlFor={name}>Attach document</label>
+      <label className="field-label" htmlFor={name}>{label}</label>
       <input id={name} name={name} type="file" accept=".pdf,.doc,.docx,.xls,.xlsx" className="mt-1 block w-full text-sm text-ink-600 file:mr-3 file:rounded-md file:border-0 file:bg-brand-600 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:bg-brand-700" onChange={(event) => onChange(event.target.files?.[0] ?? null)} />
       {attachment && <p className="mt-2 text-xs font-medium text-accent-700">Attached: {attachment.name} ({Math.ceil(attachment.size / 1024)} KB)</p>}
     </div>
