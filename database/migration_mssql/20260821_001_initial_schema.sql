@@ -92,6 +92,7 @@ CREATE TABLE dbo.frac_jobs (
   id uniqueidentifier NOT NULL CONSTRAINT PK_frac_jobs PRIMARY KEY DEFAULT NEWID(),
   company_id uniqueidentifier NOT NULL,
   well_id uniqueidentifier NULL,
+  field_id uniqueidentifier NULL,
   reference nvarchar(100) NULL CONSTRAINT UQ_frac_jobs_reference UNIQUE,
   status varchar(12) NOT NULL CONSTRAINT DF_frac_jobs_status DEFAULT 'draft',
   job_date date NULL,
@@ -112,6 +113,7 @@ CREATE TABLE dbo.frac_jobs (
   CONSTRAINT CK_frac_jobs_completion_flags CHECK (NOT (completion_enabled = 1 AND completion_skipped = 1)),
   CONSTRAINT FK_frac_jobs_company FOREIGN KEY (company_id) REFERENCES dbo.companies(id),
   CONSTRAINT FK_frac_jobs_well FOREIGN KEY (well_id) REFERENCES dbo.wells(id) ON DELETE SET NULL,
+  CONSTRAINT FK_frac_jobs_field FOREIGN KEY (field_id) REFERENCES dbo.fields(id) ON DELETE SET NULL,
   CONSTRAINT FK_frac_jobs_submitted_by FOREIGN KEY (submitted_by) REFERENCES dbo.app_users(id) ON DELETE SET NULL,
   CONSTRAINT FK_frac_jobs_created_by FOREIGN KEY (created_by) REFERENCES dbo.app_users(id) ON DELETE SET NULL
 );

@@ -49,6 +49,13 @@ async function requireWell(client: PoolClient, companyId: string, wellName: unkn
   return result.rows[0].id;
 }
 
+async function requireField(client: PoolClient, companyId: string, fieldName: unknown) {
+  if (typeof fieldName !== 'string' || !fieldName.trim()) return null;
+  const result = await client.query<{ id: string }>('select id from public.fields where company_id = $1 and name = $2', [companyId, fieldName]);
+  if (!result.rows[0]) throw new FracJobError(400, 'The selected field does not belong to your company.');
+  return result.rows[0].id;
+}
+
 export async function saveFracJob(user: SessionUser, form: any, submit: boolean) {
   const main = form.mainFracData ?? {};
   const wellInfo = main.wellInfo ?? {};
@@ -63,26 +70,27 @@ export async function saveFracJob(user: SessionUser, form: any, submit: boolean)
     const existing = await client.query<{ id: string; status: string }>('select id, status from public.frac_jobs where id = $1', [jobId]);
     if (existing.rows[0]?.status === 'submitted') throw new FracJobError(409, 'Submitted forms cannot be changed.');
     const wellId = await requireWell(client, user.companyId, wellInfo.well);
+    const fieldId = await requireField(client, user.companyId, wellInfo.field);
     const status = submit ? 'submitted' : (form.status === 'in-progress' ? 'in_progress' : 'draft');
     const job = await client.query<{ id: string; reference: string | null; submitted_at: string | null }>(
-      `insert into public.frac_jobs (id, company_id, well_id, status, job_date, submitted_at, submitted_by, created_by,
+      `insert into public.frac_jobs (id, company_id, well_id, field_id, status, job_date, submitted_at, submitted_by, created_by,
            data_source_confidence, frac_vendor, technique, job_cost_enabled, job_cost_skipped, completion_enabled, completion_skipped)
-       values ($1,$2,$3,$4::public.job_status,$5,case when $4::public.job_status = 'submitted'::public.job_status then now() else null end,case when $4::public.job_status = 'submitted'::public.job_status then $6::uuid else null end,$6::uuid,$7,$8,$9,$10,$11,$12,$13)
-       on conflict (id) do update set well_id=excluded.well_id, status=excluded.status, job_date=excluded.job_date,
+       values ($1,$2,$3,$4,$5::public.job_status,$6,case when $5::public.job_status = 'submitted'::public.job_status then now() else null end,case when $5::public.job_status = 'submitted'::public.job_status then $7::uuid else null end,$7::uuid,$8,$9,$10,$11,$12,$13,$14)
+       on conflict (id) do update set well_id=excluded.well_id, field_id=excluded.field_id, status=excluded.status, job_date=excluded.job_date,
            submitted_at=case when excluded.status = 'submitted' then now() else null end,
-           submitted_by=case when excluded.status = 'submitted' then $6 else null end, data_source_confidence=excluded.data_source_confidence,
+           submitted_by=case when excluded.status = 'submitted' then $7 else null end, data_source_confidence=excluded.data_source_confidence,
            frac_vendor=excluded.frac_vendor, technique=excluded.technique, job_cost_enabled=excluded.job_cost_enabled,
            job_cost_skipped=excluded.job_cost_skipped, completion_enabled=excluded.completion_enabled, completion_skipped=excluded.completion_skipped
        where public.frac_jobs.company_id = $2
        returning id, reference, submitted_at`,
-      [jobId, user.companyId, wellId, status, nullable(wellInfo.jobDate), user.id, nullable(wellInfo.dataSourceConfidence), nullable(wellInfo.fracVendor), nullable(reports.technique), !!jobCost.enabled, !!jobCost.skipped, !!completion.enabled, !!completion.skipped],
+      [jobId, user.companyId, wellId, fieldId, status, nullable(wellInfo.jobDate), user.id, nullable(wellInfo.dataSourceConfidence), nullable(wellInfo.fracVendor), nullable(reports.technique), !!jobCost.enabled, !!jobCost.skipped, !!completion.enabled, !!completion.skipped],
     );
     if (!job.rows[0]) throw new FracJobError(404, 'Form not found for your company.');
     await client.query(
       `insert into public.job_reservoir_details (job_id, formation_name, lithology, well_type, pad_percent, mid_perf_tvd, number_of_perforations, max_deviation, average_reservoir_pressure, bhst, average_porosity, workbook_data)
        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
        on conflict (job_id) do update set formation_name=excluded.formation_name, lithology=excluded.lithology, well_type=excluded.well_type, pad_percent=excluded.pad_percent, mid_perf_tvd=excluded.mid_perf_tvd, number_of_perforations=excluded.number_of_perforations, max_deviation=excluded.max_deviation, average_reservoir_pressure=excluded.average_reservoir_pressure, bhst=excluded.bhst, average_porosity=excluded.average_porosity, workbook_data=excluded.workbook_data`,
-      [jobId, nullable(reservoir.formationName), nullable(reservoir.lithology), nullable(reservoir.wellType), nullable(reservoir.padPercent), nullable(reservoir.midPerfTVD), nullable(reservoir.numberOfPerfs), nullable(reservoir.maxDeviation), nullable(reservoir.averageReservoirPressure), nullable(reservoir.bhst), nullable(reservoir.averagePorosity), JSON.stringify({ ...withoutRemovedWorkbookFields(main.workbookFields), wellEug: wellInfo.wellEug, field: wellInfo.field, regionArea: wellInfo.regionArea, latitude: wellInfo.latitude, longitude: wellInfo.longitude, onOffShore: wellInfo.onOffShore, rigName: wellInfo.rigName, reports })],
+      [jobId, nullable(reservoir.formationName), nullable(reservoir.lithology), nullable(reservoir.wellType), nullable(reservoir.padPercent), nullable(reservoir.midPerfTVD), nullable(reservoir.numberOfPerfs), nullable(reservoir.maxDeviation), nullable(reservoir.averageReservoirPressure), nullable(reservoir.bhst), nullable(reservoir.averagePorosity), JSON.stringify({ ...withoutRemovedWorkbookFields(main.workbookFields), wellEug: wellInfo.wellEug, field: wellInfo.field, regionArea: wellInfo.regionArea, latitude: wellInfo.latitude, longitude: wellInfo.longitude, onOffShore: wellInfo.onOffShore, hasRigName: !!wellInfo.hasRigName, rigName: wellInfo.hasRigName ? wellInfo.rigName : null, reports })],
     );
     await client.query('delete from public.job_stages where job_id = $1', [jobId]);
     for (const stage of asArray(main.stages)) await client.query(

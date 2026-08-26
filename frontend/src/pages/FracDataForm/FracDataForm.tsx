@@ -160,7 +160,7 @@ export function FracDataForm({ company, accessToken, onLogout, themeToggle }: Fr
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="badge bg-brand-100 text-brand-700">{company}</span>
+              <CompanyBrand company={company} />
               {themeToggle}
               <SaveStatus isDirty={isDirty} lastSaved={lastSaved} />
               <button type="button" onClick={handleSaveDraft} className="btn-secondary">
@@ -217,7 +217,7 @@ export function FracDataForm({ company, accessToken, onLogout, themeToggle }: Fr
             id="main"
             index={1}
             title="Main Frac Data"
-            badge={<SectionBadge status={progress.mainStatus} label="REQUIRED" required />}
+            badge={<SectionBadge status={progress.mainStatus} label="REQUIRED" />}
             isOpen={openId === 'main'}
             onToggle={() => toggle('main')}
           >
@@ -363,6 +363,20 @@ export function FracDataForm({ company, accessToken, onLogout, themeToggle }: Fr
   );
 }
 
+function CompanyBrand({ company }: { company: string }) {
+  const extensions = ['png', 'svg', 'jpg', 'jpeg', 'webp'];
+  const [extensionIndex, setExtensionIndex] = useState(0);
+  const source = `/company-logos/${encodeURIComponent(company)}.${extensions[extensionIndex]}`;
+  return (
+    <div className="flex min-h-12 items-center gap-3 rounded-xl border border-brand-200 bg-brand-50 px-3 py-2" title={company}>
+      {company && extensionIndex < extensions.length ? (
+        <img src={source} alt={`${company} logo`} className="h-9 max-w-32 object-contain" onError={() => setExtensionIndex((current) => current + 1)} />
+      ) : null}
+      <span className="text-xl font-extrabold tracking-wide text-brand-800 sm:text-2xl">{company}</span>
+    </div>
+  );
+}
+
 // ---- Sub-components ----
 
 function SummaryCell({ label, value }: { label: string; value: string }) {
@@ -397,7 +411,7 @@ function SectionProgress({
   );
 }
 
-function SectionBadge({ status, label, required }: { status: string; label: string; required?: boolean }) {
+function SectionBadge({ status, label }: { status: string; label: string }) {
   const colorClass =
     status === 'complete'
       ? 'bg-accent-100 text-accent-700'
@@ -408,20 +422,9 @@ function SectionBadge({ status, label, required }: { status: string; label: stri
           : status === 'skipped'
             ? 'bg-ink-100 text-ink-500'
             : 'bg-ink-100 text-ink-500';
-  const statusText =
-    status === 'complete'
-      ? 'Complete'
-      : status === 'error'
-        ? 'Needs attention'
-        : status === 'in-progress'
-          ? 'In progress'
-          : status === 'skipped'
-            ? 'Skipped'
-            : 'Not started';
   return (
     <span className="flex items-center gap-1.5">
       <span className={`badge ${colorClass}`}>{label}</span>
-      {/* <span className={`badge ${required ? 'bg-brand-100 text-brand-700' : 'bg-ink-100 text-ink-500'}`}>{label}</span> */}
     </span>
   );
 }

@@ -1,28 +1,26 @@
 // Main Frac Data section — well info, reports, reservoir info, and dynamic stages table.
 
 import { useEffect, useState } from 'react';
-import { Plus, Pencil } from 'lucide-react';
+import { Pencil } from 'lucide-react';
 import type { DocumentAttachment, FracFormData, StageRecord } from '@/types/fracTypes';
 import { TextField } from '@/components/FormField/TextField';
 import { NumberField } from '@/components/FormField/NumberField';
 import { DateField } from '@/components/FormField/DateField';
 import { SelectField } from '@/components/FormField/SelectField';
 import { RadioGroup } from '@/components/FormField/RadioGroup';
-import { DataTable, type Column } from '@/components/DataTable/DataTable';
 import { Modal } from '@/components/Modal/Modal';
 import { ConfirmationDialog } from '@/components/Modal/ConfirmationDialog';
 import { WorkbookFieldGrid } from '@/components/FormField/WorkbookFieldGrid';
 import { MAIN_WORKBOOK_GROUPS } from '@/data/workbookFields';
-import { getCompanyWells } from '@/services/fracDataService';
+import { getCompanyFields, getCompanyWells } from '@/services/fracDataService';
 import { generateId } from '@/utils/formatters';
 import {
   ON_OFFSHORE_OPTIONS,
   FRAC_VENDOR_OPTIONS,
   DATA_SOURCE_OPTIONS,
-  TECHNIQUE_OPTIONS,
+  TECHNIQUES_BY_FRAC_VENDOR,
   LITHOLOGY_OPTIONS,
   WELL_TYPE_OPTIONS,
-  FIELDS_BY_WELL,
   REGION_AREA_OPTIONS,
 } from '@/data/dropdownOptions';
 
@@ -36,17 +34,19 @@ interface MainFracDataSectionProps {
 
 export function MainFracDataSection({ accessToken, formData, setFormData, errorsByField, showErrors }: MainFracDataSectionProps) {
   const [stageModalOpen, setStageModalOpen] = useState(false);
-  const [editingStage, setEditingStage] = useState<StageRecord | null>(null);
   const [deleteStageId, setDeleteStageId] = useState<string | null>(null);
 
   const w = formData.mainFracData.wellInfo;
   const r = formData.mainFracData.reservoir;
   const rep = formData.mainFracData.reports;
-  const [wellOptions, setWellOptions] = useState<Array<{ value: string; label: string }>>([]);
+  const [wellOptions, setWellOptions] = useState<Array<{ value: string; label: string; uwi: string | null }>>([]);
+  const [fieldOptions, setFieldOptions] = useState<Array<{ value: string; label: string }>>([]);
 
   useEffect(() => {
     let active = true;
-    getCompanyWells(accessToken).then((wells) => { if (active) setWellOptions(wells); }).catch(() => { if (active) setWellOptions([]); });
+    Promise.all([getCompanyWells(accessToken), getCompanyFields(accessToken)]).then(([wells, fields]) => {
+      if (active) { setWellOptions(wells); setFieldOptions(fields); }
+    }).catch(() => { if (active) { setWellOptions([]); setFieldOptions([]); } });
     return () => { active = false; };
   }, [accessToken]);
 
@@ -64,7 +64,7 @@ export function MainFracDataSection({ accessToken, formData, setFormData, errors
         wellInfo: {
           ...prev.mainFracData.wellInfo,
           [key]: value,
-          ...(key === 'well' ? { field: '' } : {}),
+          ...(key === 'well' ? { wellEug: wellOptions.find((well) => well.value === value)?.uwi ?? '' } : {}),
         },
       },
     }));
@@ -85,7 +85,7 @@ export function MainFracDataSection({ accessToken, formData, setFormData, errors
   };
   const updateReportAttachment = (key: 'jobDesignReportAttachment' | 'postFracReportAttachment', file: File | null) => {
     const attachment: DocumentAttachment | null = file
-      ? { name: file.name, type: file.type, size: file.size, lastModified: file.lastModified }
+      ? { name: file.name, type: file.type, size: file.size, lastModified: file.lastModified, file }
       : null;
     updateReports(key, attachment);
   };
@@ -102,16 +102,6 @@ export function MainFracDataSection({ accessToken, formData, setFormData, errors
   });
 
   // Stage management
-  const openAddStage = () => {
-    setEditingStage(null);
-    setStageModalOpen(true);
-  };
-
-  const openEditStage = (stage: StageRecord) => {
-    setEditingStage(stage);
-    setStageModalOpen(true);
-  };
-
   const saveStage = (stage: StageRecord) => {
     setFormData((prev) => {
       const existing = prev.mainFracData.stages.find((s) => s.id === stage.id);
@@ -135,33 +125,25 @@ export function MainFracDataSection({ accessToken, formData, setFormData, errors
     setDeleteStageId(null);
   };
 
-  const stageColumns: Column<StageRecord>[] = [
-    { key: 'stage', header: 'Stage', accessor: (r) => r.stage, sortable: true },
-    { key: 'perfTop', header: 'Perf Top (ft)', accessor: (r) => r.perfTop, sortable: true },
-    { key: 'perfBottom', header: 'Perf Bottom (ft)', accessor: (r) => r.perfBottom, sortable: true },
-    { key: 'padPercent', header: 'Pad %', accessor: (r) => r.padPercent },
-    { key: 'fluidVolume', header: 'Fluid (bbl)', accessor: (r) => r.fluidVolume },
-    { key: 'proppantAmount', header: 'Proppant (lb)', accessor: (r) => r.proppantAmount },
-    { key: 'rate', header: 'Rate (bpm)', accessor: (r) => r.rate },
-    { key: 'pressure', header: 'Pressure (psi)', accessor: (r) => r.pressure },
-  ];
-
   return (
     <div className="flex flex-col gap-8">
       {/* Well Information */}
       <section>
         <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-ink-500">Well Information</h3>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <SelectField label="Well" name="well" value={w.well} required options={wellOptions} error={err('well')} onChange={(v) => updateWellInfo('well', v)} />
-          <TextField label="Well EUG" name="wellEug" value={w.wellEug} placeholder="e.g. EUG-001" onChange={(v) => updateWellInfo('wellEug', v)} />
-          <SelectField label="Field" name="field" value={w.field} required options={FIELDS_BY_WELL[w.well] ?? []} placeholder={w.well ? 'Select field' : 'Select a well first'} disabled={!w.well} error={err('field')} onChange={(v) => updateWellInfo('field', v)} />
+          <TextField label="Well" name="well" value={w.well} required list="company-wells" placeholder="Search or select a well" error={err('well')} onChange={(v) => updateWellInfo('well', v)} />
+          <datalist id="company-wells">{wellOptions.map((well) => <option key={well.value} value={well.value} />)}</datalist>
+          <TextField label="Well EUG" name="wellEug" value={w.wellEug} placeholder="Matched to selected well" disabled onChange={(v) => updateWellInfo('wellEug', v)} />
+          <TextField label="Field" name="field" value={w.field} required list="company-fields" placeholder="Search or select a field" error={err('field')} onChange={(v) => updateWellInfo('field', v)} />
+          <datalist id="company-fields">{fieldOptions.map((field) => <option key={field.value} value={field.value} />)}</datalist>
           <SelectField label="Region / Area" name="regionArea" value={w.regionArea} options={REGION_AREA_OPTIONS} onChange={(v) => updateWellInfo('regionArea', v)} />
           <NumberField label="Latitude" name="latitude" value={w.latitude} step={0.000001} onChange={(v) => updateWellInfo('latitude', v)} />
           <NumberField label="Longitude" name="longitude" value={w.longitude} step={0.000001} onChange={(v) => updateWellInfo('longitude', v)} />
           <DateField label="Job Date" name="jobDate" value={w.jobDate} required error={err('jobDate')} onChange={(v) => updateWellInfo('jobDate', v)} />
           <SelectField label="On / Off Shore" name="onOffShore" value={w.onOffShore} required options={ON_OFFSHORE_OPTIONS} error={err('onOffShore')} onChange={(v) => updateWellInfo('onOffShore', v)} />
-          <SelectField label="Frac Vendor" name="fracVendor" value={w.fracVendor} options={FRAC_VENDOR_OPTIONS} onChange={(v) => updateWellInfo('fracVendor', v)} />
-          <TextField label="Rig Name / Rigless" name="rigName" value={w.rigName} placeholder="e.g. Rig-7" onChange={(v) => updateWellInfo('rigName', v)} />
+          <SelectField label="Frac Vendor" name="fracVendor" value={w.fracVendor} options={FRAC_VENDOR_OPTIONS} onChange={(v) => { updateWellInfo('fracVendor', v); if (!(TECHNIQUES_BY_FRAC_VENDOR[v] ?? []).some((option) => option.value === rep.technique)) updateReports('technique', ''); }} />
+          <label className="flex items-center gap-2 self-end pb-2 text-sm font-medium text-ink-700"><input type="checkbox" checked={w.hasRigName} onChange={(event) => { updateWellInfo('hasRigName', event.target.checked); if (!event.target.checked) updateWellInfo('rigName', ''); }} className="h-4 w-4 rounded border-ink-300 text-brand-600" /> Has Rig Name?</label>
+          {w.hasRigName && <TextField label="Rig Name" name="rigName" value={w.rigName} placeholder="e.g. Rig-7" onChange={(v) => updateWellInfo('rigName', v)} />}
           <SelectField label="Data Source / Confidence" name="dataSourceConfidence" value={w.dataSourceConfidence} options={DATA_SOURCE_OPTIONS} onChange={(v) => updateWellInfo('dataSourceConfidence', v)} />
         </div>
       </section>
@@ -184,7 +166,7 @@ export function MainFracDataSection({ accessToken, formData, setFormData, errors
             }} />
             {rep.postFracReport && <DocumentUpload name="postFracReportFile" attachment={rep.postFracReportAttachment} onChange={(file) => updateReportAttachment('postFracReportAttachment', file)} />}
           </div>
-          <SelectField label="Technique" name="technique" value={rep.technique} options={TECHNIQUE_OPTIONS} onChange={(v) => updateReports('technique', v)} />
+          <SelectField label="Technique" name="technique" value={rep.technique} options={TECHNIQUES_BY_FRAC_VENDOR[w.fracVendor] ?? []} placeholder={w.fracVendor ? 'Select technique' : 'Select a frac vendor first'} disabled={!w.fracVendor} onChange={(v) => updateReports('technique', v)} />
         </div>
       </section>
 
@@ -235,7 +217,7 @@ export function MainFracDataSection({ accessToken, formData, setFormData, errors
       {/* Stage modal */}
       <StageModal
         open={stageModalOpen}
-        stage={editingStage}
+        stage={null}
         nextStageNumber={formData.mainFracData.stages.length + 1}
         onClose={() => setStageModalOpen(false)}
         onSave={saveStage}

@@ -58,6 +58,17 @@ export const TECHNIQUE_OPTIONS = [
   { value: 'Hi-way/Clear frac', label: 'Hi-way/Clear frac' }
 ];
 
+/** Techniques shown after a frac vendor is selected. Extend these lists as vendor capabilities are configured. */
+export const TECHNIQUES_BY_FRAC_VENDOR: Record<string, Option[]> = {
+  Schlumberger: TECHNIQUE_OPTIONS,
+  Halliburton: TECHNIQUE_OPTIONS.filter((option) => option.value !== 'Hi-Way'),
+  'Baker Hughes': TECHNIQUE_OPTIONS.filter((option) => option.value !== 'clear frac'),
+  Weatherford: TECHNIQUE_OPTIONS.filter((option) => option.value === 'Conventional' || option.value === 'clear frac'),
+  Calfrac: TECHNIQUE_OPTIONS.filter((option) => option.value !== 'Hi-way/Clear frac'),
+  Trican: TECHNIQUE_OPTIONS.filter((option) => option.value === 'Hi-Way' || option.value === 'Conventional'),
+  Other: TECHNIQUE_OPTIONS,
+};
+
 export const LITHOLOGY_OPTIONS = [
   { value: 'Sandstone', label: 'Sandstone' },
   { value: 'Carbonate', label: 'Carbonate' },

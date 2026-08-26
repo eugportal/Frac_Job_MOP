@@ -86,6 +86,7 @@ create table public.frac_jobs (
   id uuid primary key default gen_random_uuid(),
   company_id uuid not null references public.companies(id) on delete restrict,
   well_id uuid references public.wells(id) on delete set null,
+  field_id uuid references public.fields(id) on delete set null,
   reference text unique,
   status public.job_status not null default 'draft',
   job_date date,

@@ -3,6 +3,8 @@ import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import jwt from 'jsonwebtoken';
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { z } from 'zod';
 import { config } from './config.js';
 import { authenticateWithLdap } from './ldap-auth.js';
@@ -123,8 +125,55 @@ app.get('/api/companies/me/wells', async (request, response, next) => {
   const user = authenticatedSession(request);
   if (!user) return response.status(401).json({ message: 'Invalid or expired bearer token.' });
   try {
-    const result = await database.query<{ id: string; name: string }>('select id, name from public.wells where company_id = $1 order by name', [user.companyId]);
+    const result = await database.query<{ id: string; name: string; uwi: string | null }>('select id, name, uwi from public.wells where company_id = $1 order by name', [user.companyId]);
     return response.status(200).json({ wells: result.rows });
+  } catch (error) { next(error); }
+});
+
+app.get('/api/companies/me/fields', async (request, response, next) => {
+  const user = authenticatedSession(request);
+  if (!user) return response.status(401).json({ message: 'Invalid or expired bearer token.' });
+  try {
+    const result = await database.query<{ id: string; name: string }>('select id, name from public.fields where company_id = $1 order by name', [user.companyId]);
+    return response.status(200).json({ fields: result.rows });
+  } catch (error) { next(error); }
+});
+
+const documentTypes = {
+  job_design_report: { directory: 'Job Design Report', prefix: 'job_design' },
+  post_frac_report: { directory: 'Post Frac Report', prefix: 'post_frac' },
+} as const;
+
+app.post('/api/frac-jobs/:jobId/documents/:documentType', express.raw({ type: () => true, limit: '50mb' }), async (request, response, next) => {
+  const user = authenticatedSession(request);
+  if (!user) return response.status(401).json({ message: 'Invalid or expired bearer token.' });
+  if (user.role === 'viewer') return response.status(403).json({ message: 'Viewers cannot upload documents.' });
+  const documentType = request.params.documentType as keyof typeof documentTypes;
+  const definition = documentTypes[documentType];
+  if (!definition || !/^[0-9a-f-]{36}$/i.test(request.params.jobId) || !Buffer.isBuffer(request.body) || request.body.length === 0) return response.status(400).json({ message: 'A valid report file is required.' });
+  try {
+    const job = await database.query<{ well_name: string }>(
+      'select w.name as well_name from public.frac_jobs j join public.wells w on w.id = j.well_id where j.id = $1 and j.company_id = $2',
+      [request.params.jobId, user.companyId],
+    );
+    if (!job.rows[0]) return response.status(404).json({ message: 'Job not found for your company.' });
+    const originalName = decodeURIComponent(request.header('x-file-name') ?? 'report');
+    const extension = path.extname(originalName).toLowerCase();
+    if (!['.pdf', '.doc', '.docx', '.xls', '.xlsx'].includes(extension)) return response.status(400).json({ message: 'Only PDF, Word, and Excel report files are allowed.' });
+    const safeWell = job.rows[0].well_name.replace(/[^a-z0-9_-]/gi, '_');
+    const timestamp = new Date().toISOString().replace(/[-:.TZ]/g, '');
+    const fileName = `${definition.prefix}_${safeWell}_${timestamp}${extension}`;
+    const directory = path.resolve(process.cwd(), 'uploads', definition.directory);
+    await mkdir(directory, { recursive: true });
+    await writeFile(path.join(directory, fileName), request.body, { flag: 'wx' });
+    const storagePath = path.posix.join('uploads', definition.directory, fileName);
+    await database.query(
+      `insert into public.job_documents (job_id, document_type, storage_path, original_name, mime_type, byte_size, uploaded_by)
+       values ($1,$2,$3,$4,$5,$6,$7)
+       on conflict (job_id, document_type) do update set storage_path=excluded.storage_path, original_name=excluded.original_name, mime_type=excluded.mime_type, byte_size=excluded.byte_size, uploaded_by=excluded.uploaded_by, created_at=now()`,
+      [request.params.jobId, documentType, storagePath, originalName, request.header('content-type') ?? 'application/octet-stream', request.body.length, user.id],
+    );
+    return response.status(201).json({ storagePath, fileName });
   } catch (error) { next(error); }
 });
 

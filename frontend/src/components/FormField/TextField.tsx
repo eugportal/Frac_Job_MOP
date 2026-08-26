@@ -10,10 +10,12 @@ interface TextFieldProps {
   placeholder?: string;
   help?: string;
   error?: string;
+  disabled?: boolean;
+  list?: string;
   onChange: (value: string) => void;
 }
 
-export function TextField({ label, name, value, required, placeholder, help, error, onChange }: TextFieldProps) {
+export function TextField({ label, name, value, required, placeholder, help, error, disabled = false, list, onChange }: TextFieldProps) {
   return (
     <FormField label={label} name={name} required={required} help={help} error={error}>
       <input
@@ -21,9 +23,11 @@ export function TextField({ label, name, value, required, placeholder, help, err
         type="text"
         value={value}
         placeholder={placeholder}
+        disabled={disabled}
+        list={list}
         onChange={(e) => onChange(e.target.value)}
         aria-invalid={!!error}
-        className={`field-input ${error ? 'field-input-error' : ''}`}
+        className={`field-input disabled:cursor-not-allowed disabled:bg-ink-100 disabled:text-ink-400 ${error ? 'field-input-error' : ''}`}
       />
     </FormField>
   );

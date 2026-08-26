@@ -14,6 +14,7 @@ export interface WellInfo {
   jobDate: string;
   onOffShore: string;
   fracVendor: string;
+  hasRigName: boolean;
   rigName: string;
   dataSourceConfidence: string;
 }
@@ -32,6 +33,8 @@ export interface DocumentAttachment {
   type: string;
   size: number;
   lastModified: number;
+  /** Present only while the user has selected the document in this browser. */
+  file?: File;
 }
 
 export interface ReservoirInfo {
