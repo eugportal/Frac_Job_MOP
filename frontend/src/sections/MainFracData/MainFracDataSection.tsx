@@ -12,7 +12,7 @@ import { Modal } from '@/components/Modal/Modal';
 import { ConfirmationDialog } from '@/components/Modal/ConfirmationDialog';
 import { WorkbookFieldGrid } from '@/components/FormField/WorkbookFieldGrid';
 import { MAIN_WORKBOOK_GROUPS } from '@/data/workbookFields';
-import { getCompanyFields, getCompanyWells } from '@/services/fracDataService';
+import { getCompanyFields, getCompanyWells, getFracOptions } from '@/services/fracDataService';
 import { generateId } from '@/utils/formatters';
 import {
   ON_OFFSHORE_OPTIONS,
@@ -41,18 +41,19 @@ export function MainFracDataSection({ accessToken, formData, setFormData, errors
   const rep = formData.mainFracData.reports;
   const [wellOptions, setWellOptions] = useState<Array<{ value: string; label: string; uwi: string | null }>>([]);
   const [fieldOptions, setFieldOptions] = useState<Array<{ value: string; label: string }>>([]);
+  const [techniquesByVendor, setTechniquesByVendor] = useState(TECHNIQUES_BY_FRAC_VENDOR);
 
   useEffect(() => {
     let active = true;
-    Promise.all([getCompanyWells(accessToken), getCompanyFields(accessToken)]).then(([wells, fields]) => {
-      if (active) { setWellOptions(wells); setFieldOptions(fields); }
+    Promise.all([getCompanyWells(accessToken), getCompanyFields(accessToken), getFracOptions(accessToken)]).then(([wells, fields, techniques]) => {
+      if (active) { setWellOptions(wells); setFieldOptions(fields); if (Object.keys(techniques).length) setTechniquesByVendor(techniques); }
     }).catch(() => { if (active) { setWellOptions([]); setFieldOptions([]); } });
     return () => { active = false; };
   }, [accessToken]);
 
   const err = (field: string) => (showErrors ? errorsByField.get(field)?.message : undefined);
 
-  const updateWellInfo = (key: keyof typeof w, value: string | number | null) => {
+  const updateWellInfo = (key: keyof typeof w, value: string | number | boolean | null) => {
     setFormData((prev) => ({
       ...prev,
       mainFracData: {
@@ -141,7 +142,7 @@ export function MainFracDataSection({ accessToken, formData, setFormData, errors
           <NumberField label="Longitude" name="longitude" value={w.longitude} step={0.000001} onChange={(v) => updateWellInfo('longitude', v)} />
           <DateField label="Job Date" name="jobDate" value={w.jobDate} required error={err('jobDate')} onChange={(v) => updateWellInfo('jobDate', v)} />
           <SelectField label="On / Off Shore" name="onOffShore" value={w.onOffShore} required options={ON_OFFSHORE_OPTIONS} error={err('onOffShore')} onChange={(v) => updateWellInfo('onOffShore', v)} />
-          <SelectField label="Frac Vendor" name="fracVendor" value={w.fracVendor} options={FRAC_VENDOR_OPTIONS} onChange={(v) => { updateWellInfo('fracVendor', v); if (!(TECHNIQUES_BY_FRAC_VENDOR[v] ?? []).some((option) => option.value === rep.technique)) updateReports('technique', ''); }} />
+          <SelectField label="Frac Vendor" name="fracVendor" value={w.fracVendor} options={Object.keys(techniquesByVendor).length ? Object.keys(techniquesByVendor).map((value) => ({ value, label: value })) : FRAC_VENDOR_OPTIONS} onChange={(v) => { updateWellInfo('fracVendor', v); if (!(techniquesByVendor[v] ?? []).some((option) => option.value === rep.technique)) updateReports('technique', ''); }} />
           <label className="flex items-center gap-2 self-end pb-2 text-sm font-medium text-ink-700"><input type="checkbox" checked={w.hasRigName} onChange={(event) => { updateWellInfo('hasRigName', event.target.checked); if (!event.target.checked) updateWellInfo('rigName', ''); }} className="h-4 w-4 rounded border-ink-300 text-brand-600" /> Has Rig Name?</label>
           {w.hasRigName && <TextField label="Rig Name" name="rigName" value={w.rigName} placeholder="e.g. Rig-7" onChange={(v) => updateWellInfo('rigName', v)} />}
           <SelectField label="Data Source / Confidence" name="dataSourceConfidence" value={w.dataSourceConfidence} options={DATA_SOURCE_OPTIONS} onChange={(v) => updateWellInfo('dataSourceConfidence', v)} />
@@ -166,7 +167,7 @@ export function MainFracDataSection({ accessToken, formData, setFormData, errors
             }} />
             {rep.postFracReport && <DocumentUpload name="postFracReportFile" attachment={rep.postFracReportAttachment} onChange={(file) => updateReportAttachment('postFracReportAttachment', file)} />}
           </div>
-          <SelectField label="Technique" name="technique" value={rep.technique} options={TECHNIQUES_BY_FRAC_VENDOR[w.fracVendor] ?? []} placeholder={w.fracVendor ? 'Select technique' : 'Select a frac vendor first'} disabled={!w.fracVendor} onChange={(v) => updateReports('technique', v)} />
+          <SelectField label="Technique" name="technique" value={rep.technique} options={techniquesByVendor[w.fracVendor] ?? []} placeholder={w.fracVendor ? 'Select technique' : 'Select a frac vendor first'} disabled={!w.fracVendor} onChange={(v) => updateReports('technique', v)} />
         </div>
       </section>
 

@@ -6,6 +6,7 @@ const SESSION_KEY = 'frac-data-session-v2';
 interface AuthSession {
   company: string;
   accessToken: string;
+  isSuperuser: boolean;
 }
 
 function loadSession(): AuthSession | null {
@@ -14,7 +15,7 @@ function loadSession(): AuthSession | null {
     if (!raw) return null;
     const session = JSON.parse(raw) as Partial<AuthSession>;
     return typeof session.accessToken === 'string' && typeof session.company === 'string' && session.company.trim().length > 0
-      ? { company: session.company, accessToken: session.accessToken }
+      ? { company: session.company, accessToken: session.accessToken, isSuperuser: session.isSuperuser === true }
       : null;
   } catch {
     return null;
@@ -27,8 +28,8 @@ export function useAuth() {
   const beginLogin = (authMethod: AuthMethod, username: string, password: string): Promise<OtpChallenge> => requestOtp(authMethod, username, password);
 
   const confirmOtp = async (challengeId: string, otp: string) => {
-    const { accessToken, company } = await verifyOtp(challengeId, otp);
-    const nextSession = { company, accessToken };
+    const { accessToken, company, isSuperuser } = await verifyOtp(challengeId, otp);
+    const nextSession = { company, accessToken, isSuperuser };
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(nextSession));
     setSession(nextSession);
   };
@@ -38,5 +39,5 @@ export function useAuth() {
     setSession(null);
   };
 
-  return { company: session?.company ?? null, accessToken: session?.accessToken ?? null, beginLogin, confirmOtp, logout };
+  return { company: session?.company ?? null, accessToken: session?.accessToken ?? null, isSuperuser: session?.isSuperuser === true, beginLogin, confirmOtp, logout };
 }

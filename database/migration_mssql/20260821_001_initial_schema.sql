@@ -88,6 +88,31 @@ CREATE TABLE dbo.wells (
 );
 GO
 
+CREATE TABLE dbo.frac_vendors (
+  id uniqueidentifier NOT NULL CONSTRAINT PK_frac_vendors PRIMARY KEY DEFAULT NEWID(),
+  name nvarchar(255) NOT NULL CONSTRAINT UQ_frac_vendors_name UNIQUE,
+  created_at datetime2(3) NOT NULL CONSTRAINT DF_frac_vendors_created_at DEFAULT SYSUTCDATETIME(),
+  updated_at datetime2(3) NOT NULL CONSTRAINT DF_frac_vendors_updated_at DEFAULT SYSUTCDATETIME()
+);
+GO
+
+CREATE TABLE dbo.techniques (
+  id uniqueidentifier NOT NULL CONSTRAINT PK_techniques PRIMARY KEY DEFAULT NEWID(),
+  name nvarchar(255) NOT NULL CONSTRAINT UQ_techniques_name UNIQUE,
+  created_at datetime2(3) NOT NULL CONSTRAINT DF_techniques_created_at DEFAULT SYSUTCDATETIME(),
+  updated_at datetime2(3) NOT NULL CONSTRAINT DF_techniques_updated_at DEFAULT SYSUTCDATETIME()
+);
+GO
+
+CREATE TABLE dbo.frac_vendor_techniques (
+  frac_vendor_id uniqueidentifier NOT NULL,
+  technique_id uniqueidentifier NOT NULL,
+  CONSTRAINT PK_frac_vendor_techniques PRIMARY KEY (frac_vendor_id, technique_id),
+  CONSTRAINT FK_vendor_techniques_vendor FOREIGN KEY (frac_vendor_id) REFERENCES dbo.frac_vendors(id) ON DELETE CASCADE,
+  CONSTRAINT FK_vendor_techniques_technique FOREIGN KEY (technique_id) REFERENCES dbo.techniques(id) ON DELETE CASCADE
+);
+GO
+
 CREATE TABLE dbo.frac_jobs (
   id uniqueidentifier NOT NULL CONSTRAINT PK_frac_jobs PRIMARY KEY DEFAULT NEWID(),
   company_id uniqueidentifier NOT NULL,

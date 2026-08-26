@@ -5,12 +5,13 @@ export interface OtpChallenge {
   expiresInSeconds: number;
 }
 
-export type AuthMethod = 'ldap' | 'normal';
+export type AuthMethod = 'normal';
 
 interface TokenResponse {
   accessToken: string;
   expiresInSeconds: number;
   company: string;
+  isSuperuser: boolean;
 }
 
 async function request<T>(path: string, body: Record<string, string>): Promise<T> {

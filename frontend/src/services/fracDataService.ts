@@ -70,6 +70,17 @@ export async function getCompanyFields(accessToken: string): Promise<Array<{ val
   return (payload.fields ?? []).map((field) => ({ value: field.name, label: field.name }));
 }
 
+export async function getFracOptions(accessToken: string): Promise<Record<string, Array<{ value: string; label: string }>>> {
+  const response = await fetch(`${apiUrl}/api/companies/me/frac-options`, { headers: { Authorization: `Bearer ${accessToken}` } });
+  const payload = await response.json().catch(() => ({})) as { message?: string; options?: Array<{ vendor: string; technique: string | null }> };
+  if (!response.ok) throw new Error(payload.message ?? 'Unable to load frac options.');
+  return (payload.options ?? []).reduce<Record<string, Array<{ value: string; label: string }>>>((groups, option) => {
+    groups[option.vendor] ??= [];
+    if (option.technique) groups[option.vendor].push({ value: option.technique, label: option.technique });
+    return groups;
+  }, {});
+}
+
 export const localFracDataService: FracDataService = {
   async saveDraft(data: FracFormData): Promise<void> {
     saveDraftToStorage({ ...data, lastModified: new Date().toISOString(), status: 'draft' });

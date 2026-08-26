@@ -7,8 +7,8 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import { config } from './config.js';
-import { authenticateWithLdap } from './ldap-auth.js';
 import { authenticateNormally, createNormalUser, UserManagementError } from './normal-auth.js';
+import { LookupAdminError, createLookup, deleteLookup, importLookupWorkbook, listAdminLookupData, updateLookup } from './admin-lookups.js';
 import { sendOtpEmail } from './mailer.js';
 import { createOtpChallenge, verifyOtpChallenge } from './otp.js';
 import { findSessionUser, FracJobError, saveFracJob, type SessionUser } from './frac-jobs.js';
@@ -17,7 +17,7 @@ import { database } from './database.js';
 const username = z.string().trim().min(1).max(128).regex(/^[A-Za-z0-9._@-]+$/);
 const password = z.string().min(12).max(1024);
 const loginRequest = z.object({
-  authMethod: z.enum(['ldap', 'normal']),
+  authMethod: z.literal('normal'),
   username,
   password: z.string().min(1).max(1024),
 });
@@ -36,7 +36,7 @@ const app = express();
 
 app.disable('x-powered-by');
 app.use(helmet());
-app.use(cors({ origin: config.CORS_ORIGIN, methods: ['GET', 'POST'], allowedHeaders: ['Authorization', 'Content-Type'] }));
+app.use(cors({ origin: config.CORS_ORIGIN, methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], allowedHeaders: ['Authorization', 'Content-Type', 'X-Company-Id','X-File-Name'] }));
 app.use(express.json({ limit: '1mb' }));
 
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false });
@@ -59,9 +59,7 @@ app.get('/health', (_request, response) => response.status(200).json({ status: '
 app.post('/api/auth/login', authLimiter, async (request, response, next) => {
   try {
     const { authMethod, username, password } = loginRequest.parse(request.body);
-    const authenticatedUser = authMethod === 'ldap'
-      ? await authenticateWithLdap(username, password)
-      : await authenticateNormally(username, password);
+    const authenticatedUser = await authenticateNormally(username, password);
     if (!authenticatedUser) return response.status(401).json({ message: 'Invalid username or password.' });
     const user = await findSessionUser(authenticatedUser.username, authenticatedUser.email);
     if (!user) return response.status(403).json({ message: 'Your account is not assigned to a company.' });
@@ -88,7 +86,7 @@ app.post('/api/auth/verify-otp', authLimiter, async (request, response, next) =>
       issuer: config.JWT_ISSUER,
       audience: config.JWT_AUDIENCE,
     });
-    return response.status(200).json({ accessToken: token, tokenType: 'Bearer', expiresInSeconds: 3600, company: sessionUser.companyName });
+    return response.status(200).json({ accessToken: token, tokenType: 'Bearer', expiresInSeconds: 3600, company: sessionUser.companyName, isSuperuser: sessionUser.isSuperuser });
   } catch (error) {
     next(error);
   }
@@ -137,6 +135,53 @@ app.get('/api/companies/me/fields', async (request, response, next) => {
     const result = await database.query<{ id: string; name: string }>('select id, name from public.fields where company_id = $1 order by name', [user.companyId]);
     return response.status(200).json({ fields: result.rows });
   } catch (error) { next(error); }
+});
+
+app.get('/api/companies/me/frac-options', async (request, response, next) => {
+  const user = authenticatedSession(request);
+  if (!user) return response.status(401).json({ message: 'Invalid or expired bearer token.' });
+  try {
+    const result = await database.query<{ vendor: string; technique: string | null }>(`select v.name as vendor, t.name as technique from public.frac_vendors v left join public.frac_vendor_techniques vt on vt.frac_vendor_id=v.id left join public.techniques t on t.id=vt.technique_id order by v.name,t.name`);
+    return response.status(200).json({ options: result.rows });
+  } catch (error) { next(error); }
+});
+
+function requireSuperuser(request: Request, response: Response) {
+  const user = authenticatedSession(request);
+  if (!user) { response.status(401).json({ message: 'Invalid or expired bearer token.' }); return null; }
+  if (!user.isSuperuser) { response.status(403).json({ message: 'Superadmin access is required.' }); return null; }
+  return user;
+}
+
+app.get('/api/admin/lookup-data', async (request, response, next) => {
+  if (!requireSuperuser(request, response)) return;
+  const companyId = typeof request.query.companyId === 'string' ? request.query.companyId : '';
+  if (!/^[0-9a-f-]{36}$/i.test(companyId)) return response.status(400).json({ message: 'A valid company is required.' });
+  try { return response.status(200).json(await listAdminLookupData(companyId)); } catch (error) { next(error); }
+});
+app.get('/api/admin/companies', async (request, response, next) => {
+  if (!requireSuperuser(request, response)) return;
+  try {
+    const result = await database.query<{ id: string; name: string }>('select id, name from public.companies order by name');
+    return response.status(200).json({ companies: result.rows });
+  } catch (error) { next(error); }
+});
+
+app.post('/api/admin/lookups/:type', adminLimiter, async (request, response, next) => {
+  if (!requireSuperuser(request, response)) return;
+  try { return response.status(201).json({ item: await createLookup(String(request.params.type), request.body) }); } catch (error) { next(error); }
+});
+app.put('/api/admin/lookups/:type/:id', adminLimiter, async (request, response, next) => {
+  if (!requireSuperuser(request, response)) return;
+  try { return response.status(200).json({ item: await updateLookup(String(request.params.type), String(request.params.id), request.body) }); } catch (error) { next(error); }
+});
+app.delete('/api/admin/lookups/:type/:id', adminLimiter, async (request, response, next) => {
+  if (!requireSuperuser(request, response)) return;
+  try { await deleteLookup(String(request.params.type), String(request.params.id), typeof request.query.companyId === 'string' ? request.query.companyId : undefined); return response.status(204).end(); } catch (error) { next(error); }
+});
+app.post('/api/admin/lookups/:type/import', adminLimiter, express.raw({ type: () => true, limit: '10mb' }), async (request, response, next) => {
+  if (!requireSuperuser(request, response)) return;
+  try { return response.status(201).json(await importLookupWorkbook(String(request.params.type), request.header('x-company-id'), request.body)); } catch (error) { next(error); }
 });
 
 const documentTypes = {
@@ -191,6 +236,7 @@ app.get('/api/auth/me', (request, response) => {
 app.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
   if (error instanceof z.ZodError) return response.status(400).json({ message: 'Invalid request.', issues: error.flatten() });
   if (error instanceof UserManagementError) return response.status(error.statusCode).json({ message: error.message });
+  if (error instanceof LookupAdminError) return response.status(error.statusCode).json({ message: error.message });
   if (error instanceof FracJobError) return response.status(error.statusCode).json({ message: error.message });
   console.error(error);
   return response.status(500).json({ message: 'Authentication service is unavailable.' });
