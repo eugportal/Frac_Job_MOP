@@ -18,7 +18,7 @@ function SuperuserWorkspace({ accessToken, onLogout }: { accessToken: string; on
 function CompanyWorkspace({ company, accessToken, onLogout, themeToggle }: { company: string; accessToken: string; onLogout: () => void; themeToggle: JSX.Element }) {
   const [screen, setScreen] = useState<'form' | 'submissions'>('form');
   if (screen === 'submissions') return <Submissions accessToken={accessToken} title="Company submissions" onBack={() => setScreen('form')} />;
-  return <><div className="fixed bottom-4 right-4 z-50"><button className="btn-danger shadow-lg" onClick={() => setScreen('submissions')}>View submissions</button></div><FracDataForm company={company} accessToken={accessToken} onLogout={onLogout} themeToggle={themeToggle} /></>;
+  return <><div className="fixed bottom-4 right-4 z-50"><button className="btn-primary shadow-lg" onClick={() => setScreen('submissions')}>View submissions</button></div><FracDataForm company={company} accessToken={accessToken} onLogout={onLogout} themeToggle={themeToggle} /></>;
 }
 
 function App() {

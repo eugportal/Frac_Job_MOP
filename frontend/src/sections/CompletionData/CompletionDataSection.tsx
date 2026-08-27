@@ -86,7 +86,7 @@ export function CompletionDataSection({ formData, setFormData, errorsByField, sh
           <p className="mt-1 text-sm text-ink-500">This section is optional. You can skip it and submit without completion data.</p>
         </div>
         <div className="flex flex-wrap items-center justify-center gap-3">
-          <button type="button" className="btn-danger" onClick={() => setEnabled(true)}>
+          <button type="button" className="btn-primary" onClick={() => setEnabled(true)}>
             <Plus size={16} />
             Yes, Add Data
           </button>
@@ -134,7 +134,7 @@ export function CompletionDataSection({ formData, setFormData, errorsByField, sh
           <button type="button" className="btn-ghost text-sm" onClick={() => setEnabled(false, true)}>
             Skip section
           </button>
-          <button type="button" className="btn-danger py-1.5" onClick={openAddRecord}>
+          <button type="button" className="btn-primary py-1.5" onClick={openAddRecord}>
             <Plus size={16} />
             Add Record
           </button>
@@ -225,7 +225,7 @@ function CompletionRecordModal({ open, record, onClose, onSave, err }: Completio
           <button type="button" className="btn-secondary" onClick={onClose}>
             Cancel
           </button>
-          <button type="button" className="btn-danger" onClick={() => onSave(draft)}>
+          <button type="button" className="btn-primary" onClick={() => onSave(draft)}>
             <Pencil size={14} />
             Save Record
           </button>

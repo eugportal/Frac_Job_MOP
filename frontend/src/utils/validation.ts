@@ -37,8 +37,8 @@ export function validateMainFracData(data: MainFracData): FieldError[] {
   if (isBlank(r.wellType))
     errors.push({ field: 'wellType', label: 'Well Type', section, message: 'Well Type is required.' });
 
-  if (r.padPercent !== null && (r.padPercent < 0 || r.padPercent > 100))
-    errors.push({ field: 'padPercent', label: 'Pad %', section, message: 'Pad % must be between 0 and 100.' });
+  // if (r.padPercent !== null && (r.padPercent < 0 || r.padPercent > 100))
+  //   errors.push({ field: 'padPercent', label: 'Pad %', section, message: 'Pad % must be between 0 and 100.' });
   if (r.averagePorosity !== null && (r.averagePorosity < 0 || r.averagePorosity > 100))
     errors.push({ field: 'averagePorosity', label: 'Avg Porosity', section, message: 'Porosity must be between 0 and 100%.' });
   if (r.maxDeviation !== null && (r.maxDeviation < 0 || r.maxDeviation > 90))

@@ -5,6 +5,11 @@ export const ON_OFFSHORE_OPTIONS = [
   { value: 'Offshore', label: 'Offshore' },
 ];
 
+export const RIG_STATUS_OPTIONS = [
+  { value: 'Rig', label: 'Rig' },
+  { value: 'Rig Less', label: 'Rig Less' },
+];
+
 export const REGION_AREA_OPTIONS = [
   { value: 'Western Desert', label: 'Western Desert' },
   { value: 'Eastern Desert', label: 'Eastern Desert' },

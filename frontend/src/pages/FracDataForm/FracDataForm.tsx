@@ -167,7 +167,7 @@ export function FracDataForm({ company, accessToken, onLogout, themeToggle }: Fr
                 <Save size={16} />
                 Save Draft
               </button>
-              <button type="button" onClick={handleSubmitClick} className="btn-danger">
+              <button type="button" onClick={handleSubmitClick} className="btn-primary">
                 <Send size={16} />
                 Submit
               </button>
@@ -274,13 +274,13 @@ export function FracDataForm({ company, accessToken, onLogout, themeToggle }: Fr
                 <button
                   type="button"
                   onClick={() => setOpenId(openId === 'main' ? 'completion' : 'jobCost')}
-                  className="btn-danger"
+                  className="btn-primary"
                 >
                   Continue
                   <ChevronRight size={16} />
                 </button>
               ) : (
-                <button type="button" onClick={handleSubmitClick} className="btn-danger">
+                <button type="button" onClick={handleSubmitClick} className="btn-primary">
                   <Send size={16} />
                   Submit
                 </button>
@@ -302,7 +302,7 @@ export function FracDataForm({ company, accessToken, onLogout, themeToggle }: Fr
               <ChevronLeft size={16} />
               Back to Form
             </button>
-            <button type="button" className="btn-danger" onClick={confirmSubmit}>
+            <button type="button" className="btn-primary" onClick={confirmSubmit}>
               <ClipboardCheck size={16} />
               Confirm & Submit
             </button>
@@ -366,7 +366,7 @@ export function FracDataForm({ company, accessToken, onLogout, themeToggle }: Fr
 function CompanyBrand({ company }: { company: string }) {
   const extensions = ['png', 'svg', 'jpg', 'jpeg', 'webp'];
   const [extensionIndex, setExtensionIndex] = useState(0);
-  const source = `/company-logos/${encodeURIComponent(company)}.${extensions[extensionIndex]}`;
+  const source = `${import.meta.env.BASE_URL}company-logos/${encodeURIComponent(company)}.${extensions[extensionIndex]}`;
   return (
     <div className="flex min-h-12 items-center gap-3 rounded-xl border border-brand-200 bg-brand-50 px-3 py-2" title={company}>
       {company && extensionIndex < extensions.length ? (
@@ -546,7 +546,7 @@ function SuccessScreen({ submission, onNewForm }: { submission: SubmissionResult
             <FileText size={16} />
             View Summary
           </button>
-          <button type="button" className="btn-danger" onClick={onNewForm}>
+          <button type="button" className="btn-primary" onClick={onNewForm}>
             <PlusCircle size={16} />
             Create New Form
           </button>

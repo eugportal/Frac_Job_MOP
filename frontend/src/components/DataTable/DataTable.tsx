@@ -182,7 +182,7 @@ export function DataTable<T extends { id: string }>({
                       </button>
                     )}
                     {onDelete && (
-                      <button type="button" onClick={() => onDelete(row)} className="btn-danger py-1.5 text-xs">
+                      <button type="button" onClick={() => onDelete(row)} className="btn-primary py-1.5 text-xs">
                         Delete
                       </button>
                     )}

@@ -15,6 +15,7 @@ import { getCompanyFields, getCompanyWells, getFracOptions } from '@/services/fr
 import { generateId } from '@/utils/formatters';
 import {
   ON_OFFSHORE_OPTIONS,
+  RIG_STATUS_OPTIONS,
   FRAC_VENDOR_OPTIONS,
   DATA_SOURCE_OPTIONS,
   TECHNIQUES_BY_FRAC_VENDOR,
@@ -142,7 +143,7 @@ export function MainFracDataSection({ accessToken, formData, setFormData, errors
           <DateField label="Job Date" name="jobDate" value={w.jobDate} required error={err('jobDate')} onChange={(v) => updateWellInfo('jobDate', v)} />
           <SelectField label="On / Off Shore" name="onOffShore" value={w.onOffShore} required options={ON_OFFSHORE_OPTIONS} error={err('onOffShore')} onChange={(v) => updateWellInfo('onOffShore', v)} />
           <SelectField label="Frac Vendor" name="fracVendor" value={w.fracVendor} options={Object.keys(techniquesByVendor).length ? Object.keys(techniquesByVendor).map((value) => ({ value, label: value })) : FRAC_VENDOR_OPTIONS} onChange={(v) => { updateWellInfo('fracVendor', v); if (!(techniquesByVendor[v] ?? []).some((option) => option.value === rep.technique)) updateReports('technique', ''); }} />
-          <label className="flex items-center gap-2 self-end pb-2 text-sm font-medium text-ink-700"><input type="checkbox" checked={w.hasRigName} onChange={(event) => { updateWellInfo('hasRigName', event.target.checked); if (!event.target.checked) updateWellInfo('rigName', ''); }} className="h-4 w-4 rounded border-ink-300 text-brand-600" /> Has Rig Name?</label>
+          <SelectField label="Rig Status" name="hasRigName" value={w.hasRigName ? 'Rig' : 'Rig Less'} options={RIG_STATUS_OPTIONS} onChange={(value) => { const hasRigName = value === 'Rig'; updateWellInfo('hasRigName', hasRigName); if (!hasRigName) updateWellInfo('rigName', ''); }} />
           {w.hasRigName && <TextField label="Rig Name" name="rigName" value={w.rigName} placeholder="e.g. Rig-7" onChange={(v) => updateWellInfo('rigName', v)} />}
           <SelectField label="Data Source / Confidence" name="dataSourceConfidence" value={w.dataSourceConfidence} options={DATA_SOURCE_OPTIONS} onChange={(v) => updateWellInfo('dataSourceConfidence', v)} />
         </div>
@@ -169,7 +170,7 @@ export function MainFracDataSection({ accessToken, formData, setFormData, errors
           <TextField label="Formation Name" name="formationName" value={r.formationName} placeholder="e.g. Unayzah" onChange={(v) => updateReservoir('formationName', v)} />
           <SelectField label="Lithology" name="lithology" value={r.lithology} options={LITHOLOGY_OPTIONS} onChange={(v) => updateReservoir('lithology', v)} />
           <SelectField label="Well Type" name="reservoirWellType" value={r.wellType} required options={WELL_TYPE_OPTIONS} error={err('wellType')} onChange={(v) => updateReservoir('wellType', v)} />
-          <NumberField label="Pad %" name="padPercent" value={r.padPercent} min={0} max={100} step={0.1} unit="%" help="Pad volume as a percentage of total fluid volume." error={err('padPercent')} onChange={(v) => updateReservoir('padPercent', v)} />
+          {/* <NumberField label="Pad %" name="padPercent" value={r.padPercent} min={0} max={100} step={0.1} unit="%" help="Pad volume as a percentage of total fluid volume." error={err('padPercent')} onChange={(v) => updateReservoir('padPercent', v)} /> */}
           <NumberField label="MidPerf TVD" name="midPerfTVD" value={r.midPerfTVD} min={0} unit="ft" help="True vertical depth at the midpoint of perforations." error={err('midPerfTVD')} onChange={(v) => updateReservoir('midPerfTVD', v)} />
           <NumberField label="No. of Perforations" name="numberOfPerfs" value={r.numberOfPerfs} min={0} step={1} error={err('numberOfPerfs')} onChange={(v) => updateReservoir('numberOfPerfs', v)} />
           <NumberField label="Max Deviation" name="maxDeviation" value={r.maxDeviation} min={0} max={90} step={0.1} unit="°" help="Maximum wellbore deviation in degrees." error={err('maxDeviation')} onChange={(v) => updateReservoir('maxDeviation', v)} />
@@ -282,7 +283,7 @@ function StageModal({ open, stage, nextStageNumber, onClose, onSave }: StageModa
           <button type="button" className="btn-secondary" onClick={onClose}>
             Cancel
           </button>
-          <button type="button" className="btn-danger" onClick={() => onSave(draft)}>
+          <button type="button" className="btn-primary" onClick={() => onSave(draft)}>
             <Pencil size={14} />
             Save Stage
           </button>

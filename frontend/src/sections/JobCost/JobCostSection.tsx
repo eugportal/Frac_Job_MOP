@@ -22,7 +22,7 @@ export function JobCostSection({ formData, setFormData }: JobCostSectionProps) {
   if (!cost.enabled && !cost.skipped) return <div className="flex flex-col items-center justify-center gap-4 py-8 text-center">
     <div className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-50"><DollarSign size={28} className="text-brand-500" /></div>
     <div><h3 className="text-base font-semibold text-ink-800">Do you want to add job cost information?</h3><p className="mt-1 text-sm text-ink-500">This section is optional.</p></div>
-    <div className="flex gap-3"><button type="button" className="btn-danger" onClick={() => setEnabled(true)}>Yes, Add Costs</button><button type="button" className="btn-secondary" onClick={() => setEnabled(false, true)}>Skip</button></div>
+    <div className="flex gap-3"><button type="button" className="btn-primary" onClick={() => setEnabled(true)}>Yes, Add Costs</button><button type="button" className="btn-secondary" onClick={() => setEnabled(false, true)}>Skip</button></div>
   </div>;
 
   if (cost.skipped) return <div className="flex flex-col items-center justify-center gap-3 py-8 text-center"><CheckCircle2 size={32} className="text-accent-500" /><p className="text-sm font-medium text-ink-600">Section skipped</p><button type="button" className="btn-ghost text-sm" onClick={() => setEnabled(true)}>Add job cost data</button></div>;
