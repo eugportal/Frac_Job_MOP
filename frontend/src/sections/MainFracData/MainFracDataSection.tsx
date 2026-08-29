@@ -138,8 +138,8 @@ export function MainFracDataSection({ accessToken, formData, setFormData, errors
           <TextField label="Field" name="field" value={w.field} required list="company-fields" placeholder="Search or select a field" error={err('field')} onChange={(v) => updateWellInfo('field', v)} />
           <datalist id="company-fields">{fieldOptions.map((field) => <option key={field.value} value={field.value} />)}</datalist>
           <SelectField label="Region / Area" name="regionArea" value={w.regionArea} options={REGION_AREA_OPTIONS} onChange={(v) => updateWellInfo('regionArea', v)} />
-          <NumberField label="Latitude" name="latitude" value={w.latitude} step={0.000001} onChange={(v) => updateWellInfo('latitude', v)} />
-          <NumberField label="Longitude" name="longitude" value={w.longitude} step={0.000001} onChange={(v) => updateWellInfo('longitude', v)} />
+          <NumberField label="Latitude" name="latitude" value={w.latitude} step={0.000001} placeholder="e.g. 29.375900" onChange={(v) => updateWellInfo('latitude', v)} />
+          <NumberField label="Longitude" name="longitude" value={w.longitude} step={0.000001} placeholder="e.g. 47.977400" onChange={(v) => updateWellInfo('longitude', v)} />
           <DateField label="Job Date" name="jobDate" value={w.jobDate} required error={err('jobDate')} onChange={(v) => updateWellInfo('jobDate', v)} />
           <SelectField label="On / Off Shore" name="onOffShore" value={w.onOffShore} required options={ON_OFFSHORE_OPTIONS} error={err('onOffShore')} onChange={(v) => updateWellInfo('onOffShore', v)} />
           <SelectField label="Frac Vendor" name="fracVendor" value={w.fracVendor} options={Object.keys(techniquesByVendor).length ? Object.keys(techniquesByVendor).map((value) => ({ value, label: value })) : FRAC_VENDOR_OPTIONS} onChange={(v) => { updateWellInfo('fracVendor', v); if (!(techniquesByVendor[v] ?? []).some((option) => option.value === rep.technique)) updateReports('technique', ''); }} />

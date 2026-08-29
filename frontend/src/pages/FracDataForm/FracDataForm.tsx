@@ -15,7 +15,7 @@ import {
   PlusCircle,
   LogOut,
 } from 'lucide-react';
-import type { SubmissionResult } from '@/types/fracTypes';
+import type { FracFormData, SubmissionResult } from '@/types/fracTypes';
 import { useFormState } from '@/hooks/useFormState';
 import { useAccordion } from '@/hooks/useAccordion';
 import { useValidation } from '@/hooks/useValidation';
@@ -40,10 +40,11 @@ interface FracDataFormProps {
   accessToken: string;
   onLogout: () => void;
   themeToggle: ReactNode;
+  initialData?: FracFormData;
 }
 
-export function FracDataForm({ company, accessToken, onLogout, themeToggle }: FracDataFormProps) {
-  const { formData, setFormData, isDirty, saveDraft, resetForm, lastSaved } = useFormState();
+export function FracDataForm({ company, accessToken, onLogout, themeToggle, initialData }: FracDataFormProps) {
+  const { formData, setFormData, isDirty, saveDraft, resetForm, lastSaved } = useFormState(initialData);
   const { openId, toggle, setOpenId } = useAccordion('main');
   const validation = useValidation(formData);
   useAutoSave(formData, isDirty);

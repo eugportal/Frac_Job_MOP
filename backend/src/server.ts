@@ -15,6 +15,7 @@ import { sendOtpEmail } from './mailer.js';
 import { createOtpChallenge, verifyOtpChallenge } from './otp.js';
 import { findSessionUser, FracJobError, saveFracJob, type SessionUser } from './frac-jobs.js';
 import { database } from './database.js';
+import { importFracPdf } from './pdf-import.js';
 
 const username = z.string().trim().min(1).max(128).regex(/^[A-Za-z0-9._@-]+$/);
 const password = z.string().min(12).max(1024);
@@ -254,6 +255,31 @@ const documentTypes = {
 const reportUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024, files: 1 },
+});
+
+app.post('/api/frac-imports/pdf', reportUpload.single('pdf'), async (request, response, next) => {
+  const user = authenticatedSession(request);
+  if (!user) return response.status(401).json({ message: 'Invalid or expired bearer token.' });
+  if (user.role === 'viewer') return response.status(403).json({ message: 'Viewers cannot import forms.' });
+  const file = request.file;
+  if (!file?.buffer?.length || path.extname(file.originalname).toLowerCase() !== '.pdf') return response.status(400).json({ message: 'Upload one PDF document.' });
+  try {
+    await validateReportFile(file.originalname, file.buffer);
+    const originalName = path.basename(file.originalname);
+    const timestamp = new Date().toISOString().replace(/[-:.TZ]/g, '');
+    const directory = path.resolve(process.cwd(), 'uploads', 'PDF Imports');
+    await mkdir(directory, { recursive: true });
+    const fileName = `pdf_import_${user.companyId}_${timestamp}.pdf`;
+    await writeFile(path.join(directory, fileName), file.buffer, { flag: 'wx' });
+    const extracted = await importFracPdf(file.buffer);
+    const storagePath = path.posix.join('uploads', 'PDF Imports', fileName);
+    const saved = await database.query<{ id: string }>(
+      `insert into public.pdf_form_imports (company_id, uploaded_by, original_name, storage_path, mime_type, byte_size, extracted_text, mapped_data, warnings)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id`,
+      [user.companyId, user.id, originalName, storagePath, file.mimetype || 'application/pdf', file.size, extracted.text, JSON.stringify(extracted.data), JSON.stringify(extracted.warnings)],
+    );
+    return response.status(201).json({ importId: saved.rows[0].id, data: extracted.data, warnings: extracted.warnings });
+  } catch (error) { next(error); }
 });
 
 app.post('/api/frac-jobs/:jobId/documents/:documentType', reportUpload.single('reportFile'), async (request, response, next) => {

@@ -6,6 +6,8 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { AdminLookup } from '@/pages/AdminLookup/AdminLookup';
 import { AdminUsers } from '@/pages/AdminUsers/AdminUsers';
 import { Submissions } from '@/pages/Submissions/Submissions';
+import { PdfImport } from '@/pages/PdfImport/PdfImport';
+import type { FracFormData } from '@/types/fracTypes';
 
 function SuperuserWorkspace({ accessToken, onLogout }: { accessToken: string; onLogout: () => void }) {
   const [screen, setScreen] = useState<'home' | 'lookups' | 'users' | 'submissions'>('home');
@@ -16,9 +18,11 @@ function SuperuserWorkspace({ accessToken, onLogout }: { accessToken: string; on
 }
 
 function CompanyWorkspace({ company, accessToken, onLogout, themeToggle }: { company: string; accessToken: string; onLogout: () => void; themeToggle: JSX.Element }) {
-  const [screen, setScreen] = useState<'form' | 'submissions'>('form');
+  const [screen, setScreen] = useState<'import' | 'form' | 'submissions'>('import');
+  const [importedData, setImportedData] = useState<FracFormData | undefined>();
   if (screen === 'submissions') return <Submissions accessToken={accessToken} title="Company submissions" onBack={() => setScreen('form')} />;
-  return <><div className="fixed bottom-4 right-4 z-50"><button className="btn-primary shadow-lg" onClick={() => setScreen('submissions')}>View submissions</button></div><FracDataForm company={company} accessToken={accessToken} onLogout={onLogout} themeToggle={themeToggle} /></>;
+  if (screen === 'import') return <PdfImport company={company} accessToken={accessToken} onLogout={onLogout} themeToggle={themeToggle} onContinue={(data) => { setImportedData(data); setScreen('form'); }} />;
+  return <><div className="fixed bottom-4 right-4 z-50"><button className="btn-primary shadow-lg" onClick={() => setScreen('submissions')}>View submissions</button></div><FracDataForm company={company} accessToken={accessToken} onLogout={onLogout} themeToggle={themeToggle} initialData={importedData} /></>;
 }
 
 function App() {

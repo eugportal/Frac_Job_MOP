@@ -5,8 +5,9 @@ import type { FracFormData } from '@/types/fracTypes';
 import { createInitialFormState } from '@/utils/initialState';
 import { loadDraftFromStorage, saveDraftToStorage } from '@/utils/storage';
 
-export function useFormState() {
+export function useFormState(initialData?: FracFormData) {
   const [formData, setFormData] = useState<FracFormData>(() => {
+    if (initialData) return initialData;
     const draft = loadDraftFromStorage();
     return draft ?? createInitialFormState();
   });
