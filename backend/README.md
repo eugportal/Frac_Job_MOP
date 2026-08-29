@@ -4,7 +4,7 @@ Express backend providing LDAP or normal PostgreSQL authentication, email OTP ve
 
 ## Setup
 
-1. Copy `.env.example` to `.env` and enter the SMTP, database, and long random JWT secret values supplied by your infrastructure team. LDAP values are required only when LDAP login is enabled.
+1. Copy `.env.example` to `.env` and enter the EWS endpoint, EWS service-account credentials, database, and long random JWT secret values supplied by your infrastructure team. LDAP values are required only when LDAP login is enabled. The EWS account must have an Exchange mailbox and permission to send to the intended internal and external recipients.
 2. Install dependencies with `npm install`.
 3. Run `npm run dev` for development, or `npm run build` then `npm start` for production.
 4. Copy the frontend `.env.example` to `.env` and set `VITE_API_URL` to this API's network URL. Its origin must match `CORS_ORIGIN` above.
@@ -56,6 +56,6 @@ The created account has `app_users.is_superuser = true` and can use `POST /api/a
 
 OTP codes are single-use, expire after 10 minutes, and allow five verification attempts. The supplied in-memory challenge store is suitable for one API instance only. Before running multiple API instances, replace it with a shared store such as Redis so every instance can verify a challenge.
 
-Keep the API and PostgreSQL private to the on-premise network. The browser must never receive LDAP bind credentials, SMTP credentials, or the database password.
+Keep the API and PostgreSQL private to the on-premise network. The browser must never receive LDAP bind credentials, EWS credentials, or the database password.
 
 For normal users, use the provisioning endpoint above, never a SQL seed or browser. Set `app_users.auth_method` to `normal`; the schema requires a password hash for that user type. LDAP users use `auth_method = ldap` and must not have a local password hash.

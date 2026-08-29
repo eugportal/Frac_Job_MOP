@@ -67,23 +67,32 @@ export async function saveFracJob(user: SessionUser, form: any, submit: boolean,
   const client = await database.connect();
   try {
     await client.query('begin');
-    const existing = await client.query<{ id: string; status: string }>('select id, status from public.frac_jobs where id = $1', [jobId]);
-    if (existing.rows[0]?.status === 'submitted' && !allowSubmittedEdit) throw new FracJobError(409, 'Submitted forms cannot be changed.');
-    const wellId = await requireWell(client, user.companyId, wellInfo.well);
-    const fieldId = await requireField(client, user.companyId, wellInfo.field);
-    const status = existing.rows[0]?.status === 'submitted' ? 'submitted' : (submit ? 'submitted' : (form.status === 'in-progress' ? 'in_progress' : 'draft'));
+    const existing = await client.query<{ id: string; status: string; company_id: string; company_name: string }>(
+      `select j.id, j.status, j.company_id, c.name as company_name
+         from public.frac_jobs j join public.companies c on c.id = j.company_id
+        where j.id = $1 for update`,
+      [jobId],
+    );
+    const existingJob = existing.rows[0];
+    const companyId = existingJob?.company_id ?? user.companyId;
+    const companyName = existingJob?.company_name ?? user.companyName;
+    if (existingJob && existingJob.company_id !== user.companyId && !user.isSuperuser) throw new FracJobError(404, 'Form not found for your company.');
+    if (existingJob?.status === 'submitted' && !allowSubmittedEdit) throw new FracJobError(409, 'Submitted forms can only be changed by an administrator.');
+    const wellId = await requireWell(client, companyId, wellInfo.well);
+    const fieldId = await requireField(client, companyId, wellInfo.field);
+    const status = existingJob?.status === 'submitted' ? 'submitted' : (submit ? 'submitted' : (form.status === 'in-progress' ? 'in_progress' : 'draft'));
     const job = await client.query<{ id: string; reference: string | null; submitted_at: string | null }>(
       `insert into public.frac_jobs (id, company_id, well_id, field_id, status, job_date, submitted_at, submitted_by, created_by,
            data_source_confidence, frac_vendor, technique, job_cost_enabled, job_cost_skipped, completion_enabled, completion_skipped)
        values ($1,$2,$3,$4,$5::public.job_status,$6,case when $5::public.job_status = 'submitted'::public.job_status then now() else null end,case when $5::public.job_status = 'submitted'::public.job_status then $7::uuid else null end,$7::uuid,$8,$9,$10,$11,$12,$13,$14)
        on conflict (id) do update set well_id=excluded.well_id, field_id=excluded.field_id, status=excluded.status, job_date=excluded.job_date,
-           submitted_at=case when excluded.status = 'submitted' then now() else null end,
-           submitted_by=case when excluded.status = 'submitted' then $7 else null end, data_source_confidence=excluded.data_source_confidence,
+           submitted_at=case when public.frac_jobs.status = 'submitted' then public.frac_jobs.submitted_at when excluded.status = 'submitted' then now() else null end,
+           submitted_by=case when public.frac_jobs.status = 'submitted' then public.frac_jobs.submitted_by when excluded.status = 'submitted' then $7 else null end, data_source_confidence=excluded.data_source_confidence,
            frac_vendor=excluded.frac_vendor, technique=excluded.technique, job_cost_enabled=excluded.job_cost_enabled,
            job_cost_skipped=excluded.job_cost_skipped, completion_enabled=excluded.completion_enabled, completion_skipped=excluded.completion_skipped
        where public.frac_jobs.company_id = $2
        returning id, reference, submitted_at`,
-      [jobId, user.companyId, wellId, fieldId, status, nullable(wellInfo.jobDate), user.id, nullable(wellInfo.dataSourceConfidence), nullable(wellInfo.fracVendor), nullable(reports.technique), !!jobCost.enabled, !!jobCost.skipped, !!completion.enabled, !!completion.skipped],
+      [jobId, companyId, wellId, fieldId, status, nullable(wellInfo.jobDate), user.id, nullable(wellInfo.dataSourceConfidence), nullable(wellInfo.fracVendor), nullable(reports.technique), !!jobCost.enabled, !!jobCost.skipped, !!completion.enabled, !!completion.skipped],
     );
     if (!job.rows[0]) throw new FracJobError(404, 'Form not found for your company.');
     await client.query(
@@ -110,13 +119,61 @@ export async function saveFracJob(user: SessionUser, form: any, submit: boolean,
       [jobId, nullable(jobCost.fracCost), nullable(jobCost.fracpackCost), nullable(jobCost.jobOperatingDays), nullable(jobCost.jobStandbyDays), jobCost.acidConsidered ?? null, nullable(jobCost.acidCost), nullable(jobCost.ctCleaningCost), nullable(jobCost.ctLiftingCost), nullable(jobCost.additionalCost)],
     );
     if (submit && !job.rows[0].reference) await client.query(`update public.frac_jobs set reference = 'FRAC-' || to_char(now(), 'YYYYMMDD') || '-' || upper(substr(replace(id::text, '-', ''), 1, 6)) where id = $1`, [jobId]);
+    if (existingJob?.status === 'submitted' && allowSubmittedEdit) {
+      await client.query(
+        `insert into public.frac_job_edit_log (job_id, edited_by, edit_type) values ($1, $2, 'admin_edit')`,
+        [jobId, user.id],
+      );
+    }
     const final = await client.query<{ reference: string; submitted_at: string | null }>('select reference, submitted_at from public.frac_jobs where id = $1', [jobId]);
     await client.query('commit');
     const jobTotal = ['fracCost', 'fracpackCost', 'acidCost', 'ctCleaningCost', 'ctLiftingCost', 'additionalCost']
       .reduce((sum, key) => sum + (Number(jobCost[key]) || 0), 0);
-    return { formId: jobId, reference: final.rows[0].reference, submittedAt: final.rows[0].submitted_at, company: user.companyName, well: wellInfo.well ?? '', jobDate: wellInfo.jobDate ?? '', jobTotal: Math.round(jobTotal * 100) / 100 };
+    return { formId: jobId, reference: final.rows[0].reference, submittedAt: final.rows[0].submitted_at, company: companyName, well: wellInfo.well ?? '', jobDate: wellInfo.jobDate ?? '', jobTotal: Math.round(jobTotal * 100) / 100 };
   } catch (error) {
     await client.query('rollback').catch(() => undefined);
     throw error;
   } finally { client.release(); }
+}
+
+function numberOrNull(value: unknown) { return value === null || value === undefined ? null : Number(value); }
+function objectOrEmpty(value: unknown): Record<string, any> { return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, any> : {}; }
+
+export async function loadFracJob(user: SessionUser, jobId: string) {
+  const scope = user.isSuperuser ? '' : ' and j.company_id = $2';
+  const params = user.isSuperuser ? [jobId] : [jobId, user.companyId];
+  const job = await database.query<any>(
+    `select j.*, c.name as company, w.name as well, w.uwi as well_eug, f.name as field,
+            r.formation_name, r.lithology, r.well_type as reservoir_well_type, r.pad_percent, r.mid_perf_tvd,
+            r.number_of_perforations, r.max_deviation, r.average_reservoir_pressure, r.bhst, r.average_porosity,
+            r.workbook_data, d.frac_cost, d.fracpack_cost, d.job_operating_days, d.job_standby_days, d.acid_considered,
+            d.acid_cost, d.ct_cleaning_cost, d.ct_lifting_cost, d.additional_cost
+       from public.frac_jobs j join public.companies c on c.id = j.company_id
+       left join public.wells w on w.id = j.well_id left join public.fields f on f.id = j.field_id
+       left join public.job_reservoir_details r on r.job_id = j.id left join public.job_cost_details d on d.job_id = j.id
+      where j.id = $1${scope}`,
+    params,
+  );
+  const row = job.rows[0];
+  if (!row) throw new FracJobError(404, 'Submission not found.');
+  const stages = await database.query<any>('select id, stage_number, perf_top, perf_bottom, pad_percent, fluid_volume, proppant_amount, rate, pressure from public.job_stages where job_id = $1 order by stage_number', [jobId]);
+  const completions = await database.query<any>('select id, well_name_uwi, well_type, casing_size, tubing_dp_size, tubing_dp_grade, perf_interval_top, perf_interval_bottom, entrance_hole_size, completion_type, prior_workovers, triple_compo_log, cpi_log, workbook_data from public.job_completion_records where job_id = $1 order by created_at', [jobId]);
+  const workbook = objectOrEmpty(row.workbook_data);
+  const reports = objectOrEmpty(workbook.reports);
+  return {
+    company: row.company,
+    companyId: row.company_id,
+    formId: row.id,
+    status: row.status === 'in_progress' ? 'in-progress' : row.status,
+    lastModified: row.updated_at?.toISOString?.() ?? String(row.updated_at ?? new Date().toISOString()),
+    mainFracData: {
+      wellInfo: { well: row.well ?? '', wellEug: workbook.wellEug ?? row.well_eug ?? '', field: workbook.field ?? row.field ?? '', regionArea: workbook.regionArea ?? '', latitude: numberOrNull(workbook.latitude), longitude: numberOrNull(workbook.longitude), jobDate: row.job_date ? String(row.job_date).slice(0, 10) : '', onOffShore: workbook.onOffShore ?? '', fracVendor: row.frac_vendor ?? '', hasRigName: !!workbook.hasRigName, rigName: workbook.rigName ?? '', dataSourceConfidence: row.data_source_confidence ?? '' },
+      reports: { jobDesignReport: reports.jobDesignReport ?? null, postFracReport: reports.postFracReport ?? null, jobDesignReportAttachment: reports.jobDesignReportAttachment ?? null, postFracReportAttachment: reports.postFracReportAttachment ?? null, technique: row.technique ?? reports.technique ?? '' },
+      reservoir: { formationName: row.formation_name ?? '', lithology: row.lithology ?? '', wellType: row.reservoir_well_type ?? '', padPercent: numberOrNull(row.pad_percent), midPerfTVD: numberOrNull(row.mid_perf_tvd), numberOfPerfs: numberOrNull(row.number_of_perforations), maxDeviation: numberOrNull(row.max_deviation), averageReservoirPressure: numberOrNull(row.average_reservoir_pressure), bhst: numberOrNull(row.bhst), averagePorosity: numberOrNull(row.average_porosity) },
+      stages: stages.rows.map((stage: any) => ({ id: stage.id, stage: stage.stage_number, perfTop: numberOrNull(stage.perf_top), perfBottom: numberOrNull(stage.perf_bottom), padPercent: numberOrNull(stage.pad_percent), fluidVolume: numberOrNull(stage.fluid_volume), proppantAmount: numberOrNull(stage.proppant_amount), rate: numberOrNull(stage.rate), pressure: numberOrNull(stage.pressure) })),
+      workbookFields: Object.fromEntries(Object.entries(workbook).filter(([key]) => !['wellEug', 'field', 'regionArea', 'latitude', 'longitude', 'onOffShore', 'hasRigName', 'rigName', 'reports'].includes(key))),
+    },
+    completionData: { enabled: row.completion_enabled, skipped: row.completion_skipped, records: completions.rows.map((record: any) => ({ id: record.id, wellNameUWI: record.well_name_uwi, wellType: record.well_type, casingSize: numberOrNull(record.casing_size), tubingDPSize: numberOrNull(record.tubing_dp_size), tubingDPGrade: record.tubing_dp_grade ?? '', perfIntervalTop: numberOrNull(record.perf_interval_top), perfIntervalBottom: numberOrNull(record.perf_interval_bottom), entranceHoleSize: numberOrNull(record.entrance_hole_size), completionType: record.completion_type ?? '', priorWorkovers: numberOrNull(record.prior_workovers), tripleCompoLog: record.triple_compo_log ?? '', cpiLog: record.cpi_log ?? '', workbookFields: objectOrEmpty(record.workbook_data) })) },
+    jobCost: { enabled: row.job_cost_enabled, skipped: row.job_cost_skipped, fracCost: numberOrNull(row.frac_cost), fracpackCost: numberOrNull(row.fracpack_cost), jobOperatingDays: numberOrNull(row.job_operating_days), jobStandbyDays: numberOrNull(row.job_standby_days), acidConsidered: row.acid_considered, acidCost: numberOrNull(row.acid_cost), ctCleaningCost: numberOrNull(row.ct_cleaning_cost), ctLiftingCost: numberOrNull(row.ct_lifting_cost), additionalCost: numberOrNull(row.additional_cost) },
+  };
 }

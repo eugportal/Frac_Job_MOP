@@ -45,11 +45,11 @@ export function MainFracDataSection({ accessToken, formData, setFormData, errors
 
   useEffect(() => {
     let active = true;
-    Promise.all([getCompanyWells(accessToken), getCompanyFields(accessToken), getFracOptions(accessToken)]).then(([wells, fields, techniques]) => {
+    Promise.all([getCompanyWells(accessToken, formData.companyId), getCompanyFields(accessToken, formData.companyId), getFracOptions(accessToken)]).then(([wells, fields, techniques]) => {
       if (active) { setWellOptions(wells); setFieldOptions(fields); if (Object.keys(techniques).length) setTechniquesByVendor(techniques); }
     }).catch(() => { if (active) { setWellOptions([]); setFieldOptions([]); } });
     return () => { active = false; };
-  }, [accessToken]);
+  }, [accessToken, formData.companyId]);
 
   const err = (field: string) => (showErrors ? errorsByField.get(field)?.message : undefined);
 

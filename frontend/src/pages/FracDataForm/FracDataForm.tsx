@@ -41,9 +41,10 @@ interface FracDataFormProps {
   onLogout: () => void;
   themeToggle: ReactNode;
   initialData?: FracFormData;
+  submittedJobId?: string;
 }
 
-export function FracDataForm({ company, accessToken, onLogout, themeToggle, initialData }: FracDataFormProps) {
+export function FracDataForm({ company, accessToken, onLogout, themeToggle, initialData, submittedJobId }: FracDataFormProps) {
   const { formData, setFormData, isDirty, saveDraft, resetForm, lastSaved } = useFormState(initialData);
   const { openId, toggle, setOpenId } = useAccordion('main');
   const validation = useValidation(formData);
@@ -56,7 +57,7 @@ export function FracDataForm({ company, accessToken, onLogout, themeToggle, init
   const [pendingAction] = useState<null | (() => void)>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [saveError, setSaveError] = useState('');
-  const fracDataService = useMemo(() => createFracDataService(accessToken), [accessToken]);
+  const fracDataService = useMemo(() => createFracDataService(accessToken, submittedJobId), [accessToken, submittedJobId]);
 
   const progress = computeProgress(formData);
   const costBreakdown = computeJobCostBreakdown(formData.jobCost);
@@ -166,11 +167,11 @@ export function FracDataForm({ company, accessToken, onLogout, themeToggle, init
               <SaveStatus isDirty={isDirty} lastSaved={lastSaved} />
               <button type="button" onClick={handleSaveDraft} className="btn-secondary">
                 <Save size={16} />
-                Save Draft
+                {submittedJobId ? 'Save Changes' : 'Save Draft'}
               </button>
               <button type="button" onClick={handleSubmitClick} className="btn-primary">
                 <Send size={16} />
-                Submit
+                {submittedJobId ? 'Save Changes' : 'Submit'}
               </button>
               <button type="button" onClick={onLogout} className="btn-ghost" aria-label="Sign out">
                 <LogOut size={16} />
@@ -269,7 +270,7 @@ export function FracDataForm({ company, accessToken, onLogout, themeToggle, init
             <div className="flex items-center gap-2">
               <button type="button" onClick={handleSaveDraft} className="btn-secondary">
                 <Save size={16} />
-                Save Draft
+                {submittedJobId ? 'Save Changes' : 'Save Draft'}
               </button>
               {openId !== 'jobCost' ? (
                 <button
@@ -283,7 +284,7 @@ export function FracDataForm({ company, accessToken, onLogout, themeToggle, init
               ) : (
                 <button type="button" onClick={handleSubmitClick} className="btn-primary">
                   <Send size={16} />
-                  Submit
+                  {submittedJobId ? 'Save Changes' : 'Submit'}
                 </button>
               )}
             </div>
@@ -295,7 +296,7 @@ export function FracDataForm({ company, accessToken, onLogout, themeToggle, init
       <Modal
         open={reviewOpen}
         onClose={() => setReviewOpen(false)}
-        title="Review Submission"
+        title={submittedJobId ? 'Review Changes' : 'Review Submission'}
         maxWidth="max-w-2xl"
         footer={
           <>
@@ -305,7 +306,7 @@ export function FracDataForm({ company, accessToken, onLogout, themeToggle, init
             </button>
             <button type="button" className="btn-primary" onClick={confirmSubmit}>
               <ClipboardCheck size={16} />
-              Confirm & Submit
+              {submittedJobId ? 'Confirm Changes' : 'Confirm & Submit'}
             </button>
           </>
         }

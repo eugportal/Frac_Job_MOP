@@ -110,6 +110,8 @@ export interface JobCost {
 
 export interface FracFormData {
   company: string;
+  /** Present when an administrator opens a saved submission from another company. */
+  companyId?: string;
   formId: string;
   status: FormStatus;
   lastModified: string;
@@ -119,6 +121,7 @@ export interface FracFormData {
 }
 
 export interface SubmissionResult {
+  formId: string;
   reference: string;
   submittedAt: string;
   company: string;

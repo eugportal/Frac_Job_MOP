@@ -13,7 +13,7 @@ import { authenticateNormally, createNormalUser, deleteNormalUser, updateNormalU
 import { LookupAdminError, createLookup, deleteLookup, importLookupWorkbook, listAdminLookupData, updateLookup } from './admin-lookups.js';
 import { sendOtpEmail } from './mailer.js';
 import { createOtpChallenge, verifyOtpChallenge } from './otp.js';
-import { findSessionUser, FracJobError, saveFracJob, type SessionUser } from './frac-jobs.js';
+import { findSessionUser, FracJobError, loadFracJob, saveFracJob, type SessionUser } from './frac-jobs.js';
 import { database } from './database.js';
 import { importFracPdf } from './pdf-import.js';
 
@@ -89,7 +89,7 @@ app.post('/api/auth/verify-otp', authLimiter, async (request, response, next) =>
       issuer: config.JWT_ISSUER,
       audience: config.JWT_AUDIENCE,
     });
-    return response.status(200).json({ accessToken: token, tokenType: 'Bearer', expiresInSeconds: 3600, company: sessionUser.companyName, isSuperuser: sessionUser.isSuperuser });
+    return response.status(200).json({ accessToken: token, tokenType: 'Bearer', expiresInSeconds: 3600, company: sessionUser.companyName, role: sessionUser.role, isSuperuser: sessionUser.isSuperuser });
   } catch (error) {
     next(error);
   }
@@ -112,14 +112,14 @@ app.post('/api/frac-jobs/drafts', async (request, response, next) => {
   const user = authenticatedSession(request);
   if (!user) return response.status(401).json({ message: 'Invalid or expired bearer token.' });
   if (user.role === 'viewer') return response.status(403).json({ message: 'Viewers cannot save forms.' });
-  try { return response.status(200).json({ job: await saveFracJob(user, request.body, false, true) }); } catch (error) { next(error); }
+  try { return response.status(200).json({ job: await saveFracJob(user, request.body, false) }); } catch (error) { next(error); }
 });
 
 app.post('/api/frac-jobs/submit', async (request, response, next) => {
   const user = authenticatedSession(request);
   if (!user) return response.status(401).json({ message: 'Invalid or expired bearer token.' });
   if (user.role === 'viewer') return response.status(403).json({ message: 'Viewers cannot submit forms.' });
-  try { return response.status(201).json({ job: await saveFracJob(user, request.body, true, true) }); } catch (error) { next(error); }
+  try { return response.status(201).json({ job: await saveFracJob(user, request.body, true) }); } catch (error) { next(error); }
 });
 
 function jobScope(user: SessionUser) { return user.isSuperuser ? { clause: '', values: [] as string[] } : { clause: ' and j.company_id = $1', values: [user.companyId] }; }
@@ -143,6 +143,23 @@ app.get('/api/frac-jobs/submissions', async (request, response, next) => {
   } catch (error) { next(error); }
 });
 
+app.get('/api/frac-jobs/:jobId', async (request, response, next) => {
+  const user = authenticatedSession(request);
+  if (!user) return response.status(401).json({ message: 'Invalid or expired bearer token.' });
+  const jobId = String(request.params.jobId);
+  if (!/^[0-9a-f-]{36}$/i.test(jobId)) return response.status(404).json({ message: 'Submission not found.' });
+  try { return response.status(200).json({ form: await loadFracJob(user, jobId) }); } catch (error) { next(error); }
+});
+
+app.put('/api/frac-jobs/:jobId', async (request, response, next) => {
+  const user = authenticatedSession(request);
+  if (!user) return response.status(401).json({ message: 'Invalid or expired bearer token.' });
+  if (!user.isSuperuser && user.role !== 'admin') return response.status(403).json({ message: 'Administrator access is required to edit submitted forms.' });
+  const jobId = String(request.params.jobId);
+  if (!/^[0-9a-f-]{36}$/i.test(jobId)) return response.status(404).json({ message: 'Submission not found.' });
+  try { return response.status(200).json({ job: await saveFracJob(user, { ...request.body, formId: jobId }, false, true) }); } catch (error) { next(error); }
+});
+
 app.get('/api/frac-jobs/:jobId/documents/:documentType/download', async (request, response, next) => {
   const user = authenticatedSession(request);
   if (!user) return response.status(401).json({ message: 'Invalid or expired bearer token.' });
@@ -164,11 +181,20 @@ app.get('/api/frac-jobs/:jobId/documents/:documentType/download', async (request
   } catch (error) { next(error); }
 });
 
+function lookupCompanyId(request: Request, user: SessionUser) {
+  const requested = typeof request.query.companyId === 'string' ? request.query.companyId : '';
+  if (!requested) return user.companyId;
+  if (!user.isSuperuser || !/^[0-9a-f-]{36}$/i.test(requested)) return null;
+  return requested;
+}
+
 app.get('/api/companies/me/wells', async (request, response, next) => {
   const user = authenticatedSession(request);
   if (!user) return response.status(401).json({ message: 'Invalid or expired bearer token.' });
+  const companyId = lookupCompanyId(request, user);
+  if (!companyId) return response.status(403).json({ message: 'You cannot access another company’s lookup data.' });
   try {
-    const result = await database.query<{ id: string; name: string; uwi: string | null }>('select id, name, uwi from public.wells where company_id = $1 order by name', [user.companyId]);
+    const result = await database.query<{ id: string; name: string; uwi: string | null }>('select id, name, uwi from public.wells where company_id = $1 order by name', [companyId]);
     return response.status(200).json({ wells: result.rows });
   } catch (error) { next(error); }
 });
@@ -176,8 +202,10 @@ app.get('/api/companies/me/wells', async (request, response, next) => {
 app.get('/api/companies/me/fields', async (request, response, next) => {
   const user = authenticatedSession(request);
   if (!user) return response.status(401).json({ message: 'Invalid or expired bearer token.' });
+  const companyId = lookupCompanyId(request, user);
+  if (!companyId) return response.status(403).json({ message: 'You cannot access another company’s lookup data.' });
   try {
-    const result = await database.query<{ id: string; name: string }>('select id, name from public.fields where company_id = $1 order by name', [user.companyId]);
+    const result = await database.query<{ id: string; name: string }>('select id, name from public.fields where company_id = $1 order by name', [companyId]);
     return response.status(200).json({ fields: result.rows });
   } catch (error) { next(error); }
 });
@@ -293,8 +321,8 @@ app.post('/api/frac-jobs/:jobId/documents/:documentType', reportUpload.single('r
   if (!definition || !/^[0-9a-f-]{36}$/i.test(jobId) || !reportFile?.buffer?.length) return response.status(400).json({ message: 'A valid report file is required.' });
   try {
     const job = await database.query<{ well_name: string }>(
-      'select w.name as well_name from public.frac_jobs j join public.wells w on w.id = j.well_id where j.id = $1 and j.company_id = $2',
-      [jobId, user.companyId],
+      `select w.name as well_name from public.frac_jobs j join public.wells w on w.id = j.well_id where j.id = $1${user.isSuperuser ? '' : ' and j.company_id = $2'}`,
+      user.isSuperuser ? [jobId] : [jobId, user.companyId],
     );
     if (!job.rows[0]) return response.status(404).json({ message: 'Job not found for your company.' });
     const originalName = path.basename(reportFile.originalname);

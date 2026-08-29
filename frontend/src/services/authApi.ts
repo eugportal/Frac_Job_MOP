@@ -12,6 +12,7 @@ interface TokenResponse {
   accessToken: string;
   expiresInSeconds: number;
   company: string;
+  role: 'admin' | 'editor' | 'viewer';
   isSuperuser: boolean;
 }
 

@@ -13,10 +13,10 @@ import {
 // const apiUrl = (import.meta.env.VITE_API_URL ?? '/api/frac').replace(/\/$/, '');
 const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:3001').replace(/\/$/, '');
 
-async function saveToApi(accessToken: string, path: string, data: FracFormData): Promise<SubmissionResult> {
+async function saveToApi(accessToken: string, path: string, data: FracFormData, method = 'POST'): Promise<SubmissionResult> {
   const { jobDesignReportAttachment, postFracReportAttachment, ...reports } = data.mainFracData.reports;
   const payloadData = { ...data, mainFracData: { ...data.mainFracData, reports: { ...reports, jobDesignReportAttachment: stripFile(jobDesignReportAttachment), postFracReportAttachment: stripFile(postFracReportAttachment) } } };
-  const response = await fetch(`${apiUrl}${path}`, { method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(payloadData) });
+  const response = await fetch(`${apiUrl}${path}`, { method, headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(payloadData) });
   const payload = await response.json().catch(() => ({})) as { message?: string; job?: SubmissionResult };
   if (!response.ok || !payload.job) throw new Error(payload.message ?? 'Unable to save the frac job.');
   return payload.job;
@@ -52,24 +52,34 @@ async function uploadSelectedReports(accessToken: string, jobId: string, data: F
   }
 }
 
-export function createFracDataService(accessToken: string): FracDataService {
+export function createFracDataService(accessToken: string, submittedJobId?: string): FracDataService {
+  const editPath = submittedJobId ? `/api/frac-jobs/${submittedJobId}` : null;
   return {
-    async saveDraft(data) { const job = await saveToApi(accessToken, '/api/frac-jobs/drafts', data); await uploadSelectedReports(accessToken, job.formId, data); },
+    async saveDraft(data) { const job = await saveToApi(accessToken, editPath ?? '/api/frac-jobs/drafts', data, editPath ? 'PUT' : 'POST'); await uploadSelectedReports(accessToken, job.formId, data); },
     async loadDraft() { return null; },
     async clearDraft() { clearDraftFromStorage(); },
-    async submit(data) { const job = await saveToApi(accessToken, '/api/frac-jobs/submit', data); await uploadSelectedReports(accessToken, job.formId, data); clearDraftFromStorage(); return job; },
+    async submit(data) { const job = await saveToApi(accessToken, editPath ?? '/api/frac-jobs/submit', data, editPath ? 'PUT' : 'POST'); await uploadSelectedReports(accessToken, job.formId, data); if (!editPath) clearDraftFromStorage(); return job; },
   };
 }
 
-export async function getCompanyWells(accessToken: string): Promise<Array<{ value: string; label: string; uwi: string | null }>> {
-  const response = await fetch(`${apiUrl}/api/companies/me/wells`, { headers: { Authorization: `Bearer ${accessToken}` } });
+export async function getSubmittedFracJob(accessToken: string, jobId: string): Promise<FracFormData> {
+  const response = await fetch(`${apiUrl}/api/frac-jobs/${jobId}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+  const payload = await response.json().catch(() => ({})) as { message?: string; form?: FracFormData };
+  if (!response.ok || !payload.form) throw new Error(payload.message ?? 'Unable to load the submission.');
+  return payload.form;
+}
+
+export async function getCompanyWells(accessToken: string, companyId?: string): Promise<Array<{ value: string; label: string; uwi: string | null }>> {
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : '';
+  const response = await fetch(`${apiUrl}/api/companies/me/wells${query}`, { headers: { Authorization: `Bearer ${accessToken}` } });
   const payload = await response.json().catch(() => ({})) as { message?: string; wells?: Array<{ name: string; uwi: string | null }> };
   if (!response.ok) throw new Error(payload.message ?? 'Unable to load company wells.');
   return (payload.wells ?? []).map((well) => ({ value: well.name, label: well.name, uwi: well.uwi }));
 }
 
-export async function getCompanyFields(accessToken: string): Promise<Array<{ value: string; label: string }>> {
-  const response = await fetch(`${apiUrl}/api/companies/me/fields`, { headers: { Authorization: `Bearer ${accessToken}` } });
+export async function getCompanyFields(accessToken: string, companyId?: string): Promise<Array<{ value: string; label: string }>> {
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : '';
+  const response = await fetch(`${apiUrl}/api/companies/me/fields${query}`, { headers: { Authorization: `Bearer ${accessToken}` } });
   const payload = await response.json().catch(() => ({})) as { message?: string; fields?: Array<{ name: string }> };
   if (!response.ok) throw new Error(payload.message ?? 'Unable to load company fields.');
   return (payload.fields ?? []).map((field) => ({ value: field.name, label: field.name }));
@@ -114,6 +124,7 @@ export const localFracDataService: FracDataService = {
     clearDraftFromStorage();
 
     return {
+      formId: data.formId,
       reference,
       submittedAt,
       company: data.company || 'Unknown',
