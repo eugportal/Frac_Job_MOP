@@ -1,5 +1,5 @@
-// const apiUrl = (import.meta.env.VITE_API_URL ?? '/api/frac').replace(/\/$/, '');
-const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:3001').replace(/\/$/, '');
+const apiUrl = (import.meta.env.VITE_API_URL ?? '/api/frac').replace(/\/$/, '');
+// const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:3001').replace(/\/$/, '');
 export type LookupType = 'fields' | 'wells' | 'vendors' | 'techniques';
 export interface LookupData { companies: Item[]; fields: Item[]; wells: WellItem[]; vendors: Item[]; techniques: TechniqueItem[]; }
 export interface Item { id: string; name: string; }

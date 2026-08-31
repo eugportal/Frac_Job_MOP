@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Download, FileText, RefreshCw } from 'lucide-react';
 
-// const apiUrl = (import.meta.env.VITE_API_URL ?? '/api/frac').replace(/\/$/, '');
-const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:3001').replace(/\/$/, '');
+const apiUrl = (import.meta.env.VITE_API_URL ?? '/api/frac').replace(/\/$/, '');
+// const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:3001').replace(/\/$/, '');
 type Document = { type: string; name: string | null };
 type Submission = { id: string; reference: string | null; company: string; well: string | null; job_date: string | null; submitted_at: string | null; submitted_by: string | null; documents: Document[] };
 

@@ -8,6 +8,7 @@ interface NumberFieldProps {
   value: number | null;
   required?: boolean;
   unit?: string;
+  placeholder:string
   min?: number;
   max?: number;
   step?: number;
@@ -28,6 +29,7 @@ export function NumberField({
   step,
   help,
   error,
+  placeholder,
   disabled = false,
   onChange,
 }: NumberFieldProps) {
@@ -41,7 +43,7 @@ export function NumberField({
         max={max}
         step={step ?? 'any'}
         disabled={disabled}
-        placeholder="—"
+        placeholder={placeholder}
         onChange={(e) => {
           const raw = e.target.value;
           if (raw === '') {

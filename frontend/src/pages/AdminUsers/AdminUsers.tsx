@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { adminLookups, type Item } from '@/services/adminLookupService';
 
-// const apiUrl = (import.meta.env.VITE_API_URL ?? '/api/frac').replace(/\/$/, '');
-const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:3001').replace(/\/$/, '');
+const apiUrl = (import.meta.env.VITE_API_URL ?? '/api/frac').replace(/\/$/, '');
+// const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:3001').replace(/\/$/, '');
 type User = { id: string; username: string; email: string; company_id: string; company: string; role: 'admin' | 'editor' | 'viewer' };
 const empty = { username: '', email: '', password: '', companyId: '', role: 'editor' };
 

@@ -235,14 +235,14 @@ function CompletionRecordModal({ open, record, onClose, onSave, err }: Completio
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <TextField label="Well Name / UWI" name="wellNameUWI" value={draft.wellNameUWI} required placeholder="e.g. KPC-001" error={err(`completion[0].wellNameUWI`)} onChange={(v) => update('wellNameUWI', v)} />
         <SelectField label="Well Type" name="compWellType" value={draft.wellType} required options={WELL_TYPE_OPTIONS} error={err(`completion[0].wellType`)} onChange={(v) => update('wellType', v)} />
-        <NumberField label="Casing Size" name="casingSize" value={draft.casingSize} min={0} unit="in" onChange={(v) => update('casingSize', v)} />
-        <NumberField label="Tubing / DP Size" name="tubingDPSize" value={draft.tubingDPSize} min={0} unit="in" onChange={(v) => update('tubingDPSize', v)} />
+        <NumberField placeholder='' label="Casing Size" name="casingSize" value={draft.casingSize} min={0} unit="in" onChange={(v) => update('casingSize', v)} />
+        <NumberField placeholder='' label="Tubing / DP Size" name="tubingDPSize" value={draft.tubingDPSize} min={0} unit="in" onChange={(v) => update('tubingDPSize', v)} />
         <SelectField label="Tubing / DP Grade" name="tubingDPGrade" value={draft.tubingDPGrade} options={TUBING_GRADE_OPTIONS} onChange={(v) => update('tubingDPGrade', v)} />
-        <NumberField label="Perf Interval Top" name="perfIntervalTop" value={draft.perfIntervalTop} min={0} unit="ft" onChange={(v) => update('perfIntervalTop', v)} />
-        <NumberField label="Perf Interval Bottom" name="perfIntervalBottom" value={draft.perfIntervalBottom} min={0} unit="ft" onChange={(v) => update('perfIntervalBottom', v)} />
-        <NumberField label="Entrance Hole Size" name="entranceHoleSize" value={draft.entranceHoleSize} min={0} unit="in" onChange={(v) => update('entranceHoleSize', v)} />
+        <NumberField placeholder='' label="Perf Interval Top" name="perfIntervalTop" value={draft.perfIntervalTop} min={0} unit="ft" onChange={(v) => update('perfIntervalTop', v)} />
+        <NumberField placeholder='' label="Perf Interval Bottom" name="perfIntervalBottom" value={draft.perfIntervalBottom} min={0} unit="ft" onChange={(v) => update('perfIntervalBottom', v)} />
+        <NumberField placeholder='' label="Entrance Hole Size" name="entranceHoleSize" value={draft.entranceHoleSize} min={0} unit="in" onChange={(v) => update('entranceHoleSize', v)} />
         <SelectField label="Completion Type" name="completionType" value={draft.completionType} options={COMPLETION_TYPE_OPTIONS} onChange={(v) => update('completionType', v)} />
-        <NumberField label="Prior Workovers" name="priorWorkovers" value={draft.priorWorkovers} min={0} step={1} onChange={(v) => update('priorWorkovers', v)} />
+        <NumberField placeholder='' label="Prior Workovers" name="priorWorkovers" value={draft.priorWorkovers} min={0} step={1} onChange={(v) => update('priorWorkovers', v)} />
         <SelectField label="Triple Compo Log" name="tripleCompoLog" value={draft.tripleCompoLog} options={AVAILABILITY_OPTIONS} onChange={(v) => update('tripleCompoLog', v)} />
         <SelectField label="CPI Log" name="cpiLog" value={draft.cpiLog} options={AVAILABILITY_OPTIONS} onChange={(v) => update('cpiLog', v)} />
       </div>

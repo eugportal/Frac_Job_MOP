@@ -33,15 +33,15 @@ export function JobCostSection({ formData, setFormData }: JobCostSectionProps) {
     <div className="card overflow-hidden">
       <div className="border-b border-ink-200 bg-brand-50 px-5 py-3"><h3 className="text-sm font-semibold text-ink-800">Job Cost</h3><p className="text-xs text-ink-500">Enter the job-level costs and operating details.</p></div>
       <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 lg:grid-cols-3">
-        <NumberField label="Frac Cost $" name="frac-cost" value={cost.fracCost} min={0} unit="USD" onChange={(value) => update('fracCost', value)} />
-        <NumberField label="Fracpack Cost $" name="fracpack-cost" value={cost.fracpackCost} min={0} unit="USD" onChange={(value) => update('fracpackCost', value)} />
-        <NumberField label="Job Operating Days" name="job-operating-days" value={cost.jobOperatingDays} min={0} step={1} onChange={(value) => update('jobOperatingDays', value)} />
-        <NumberField label="Job Standby Days" name="job-standby-days" value={cost.jobStandbyDays} min={0} step={1} onChange={(value) => update('jobStandbyDays', value)} />
+        <NumberField placeholder='' label="Frac Cost $" name="frac-cost" value={cost.fracCost} min={0} unit="USD" onChange={(value) => update('fracCost', value)} />
+        <NumberField placeholder='' label="Fracpack Cost $" name="fracpack-cost" value={cost.fracpackCost} min={0} unit="USD" onChange={(value) => update('fracpackCost', value)} />
+        <NumberField placeholder='' label="Job Operating Days" name="job-operating-days" value={cost.jobOperatingDays} min={0} step={1} onChange={(value) => update('jobOperatingDays', value)} />
+        <NumberField placeholder='' label="Job Standby Days" name="job-standby-days" value={cost.jobStandbyDays} min={0} step={1} onChange={(value) => update('jobStandbyDays', value)} />
         <RadioGroup label="Acid Considered?" name="acid-considered" value={cost.acidConsidered} onChange={(value) => setFormData((prev) => ({ ...prev, jobCost: { ...prev.jobCost, acidConsidered: value, acidCost: value ? prev.jobCost.acidCost : null } }))} />
-        <NumberField label="Acid Cost $" name="acid-cost" value={cost.acidCost} min={0} unit="USD" disabled={cost.acidConsidered === false} onChange={(value) => update('acidCost', value)} />
-        <NumberField label="CT Cleaning Cost $" name="ct-cleaning-cost" value={cost.ctCleaningCost} min={0} unit="USD" onChange={(value) => update('ctCleaningCost', value)} />
-        <NumberField label="CT/Lifting Cost $" name="ct-lifting-cost" value={cost.ctLiftingCost} min={0} unit="USD" onChange={(value) => update('ctLiftingCost', value)} />
-        <NumberField label="Additional Cost $" name="additional-cost" value={cost.additionalCost} min={0} unit="USD" onChange={(value) => update('additionalCost', value)} />
+        <NumberField placeholder='' label="Acid Cost $" name="acid-cost" value={cost.acidCost} min={0} unit="USD" disabled={cost.acidConsidered === false} onChange={(value) => update('acidCost', value)} />
+        <NumberField placeholder='' label="CT Cleaning Cost $" name="ct-cleaning-cost" value={cost.ctCleaningCost} min={0} unit="USD" onChange={(value) => update('ctCleaningCost', value)} />
+        <NumberField placeholder='' label="CT/Lifting Cost $" name="ct-lifting-cost" value={cost.ctLiftingCost} min={0} unit="USD" onChange={(value) => update('ctLiftingCost', value)} />
+        <NumberField placeholder='' label="Additional Cost $" name="additional-cost" value={cost.additionalCost} min={0} unit="USD" onChange={(value) => update('additionalCost', value)} />
         <div className="flex flex-col"><span className="field-label">Job Total Cost $</span><output className="field-input flex items-center bg-ink-50 font-semibold text-brand-700">{formatCurrency(total)}</output></div>
       </div>
     </div>
