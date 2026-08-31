@@ -28,6 +28,8 @@ export function validateMainFracData(data: MainFracData): FieldError[] {
     errors.push({ field: 'jobDate', label: 'Job Date', section, message: 'Job Date is not a valid date.' });
   if (isBlank(w.onOffShore))
     errors.push({ field: 'onOffShore', label: 'On / Off Shore', section, message: 'Select Onshore or Offshore.' });
+  if (isBlank(String(data.workbookFields.jobSuccessClassification ?? '')))
+    errors.push({ field: 'jobSuccessClassification', label: 'Job Success Classification', section, message: 'Job Success Classification is required.' });
 
   if (w.fracVendor === '' && !isBlank(w.fracVendor)) {
     // controlled select blank is okay

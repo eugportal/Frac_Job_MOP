@@ -39,7 +39,7 @@ export function MainFracDataSection({ accessToken, formData, setFormData, errors
   const w = formData.mainFracData.wellInfo;
   const r = formData.mainFracData.reservoir;
   const rep = formData.mainFracData.reports;
-  const [wellOptions, setWellOptions] = useState<Array<{ value: string; label: string; uwi: string | null }>>([]);
+  const [wellOptions, setWellOptions] = useState<Array<{ value: string; label: string; wellEug: string | null }>>([]);
   const [fieldOptions, setFieldOptions] = useState<Array<{ value: string; label: string }>>([]);
   const [techniquesByVendor, setTechniquesByVendor] = useState(TECHNIQUES_BY_FRAC_VENDOR);
 
@@ -65,7 +65,7 @@ export function MainFracDataSection({ accessToken, formData, setFormData, errors
         wellInfo: {
           ...prev.mainFracData.wellInfo,
           [key]: value,
-          ...(key === 'well' ? { wellEug: wellOptions.find((well) => well.value === value)?.uwi ?? '' } : {}),
+          ...(key === 'well' ? { wellEug: wellOptions.find((well) => well.value === value)?.wellEug ?? '' } : {}),
         },
       },
     }));
@@ -159,7 +159,9 @@ export function MainFracDataSection({ accessToken, formData, setFormData, errors
           <div className="flex flex-col gap-2">
             <DocumentUpload label="Post Frac Report" name="postFracReportFile" attachment={rep.postFracReportAttachment} onChange={(file) => { updateReports('postFracReport', !!file); updateReportAttachment('postFracReportAttachment', file); }} />
           </div>
-          <SelectField label="Technique" name="technique" value={rep.technique} options={techniquesByVendor[w.fracVendor] ?? []} placeholder={w.fracVendor ? 'Select technique' : 'Select a frac vendor first'} disabled={!w.fracVendor} onChange={(v) => updateReports('technique', v)} />
+          {w.fracVendor.trim().toLowerCase() === 'other'
+            ? <TextField label="Technique" name="technique" value={rep.technique} required placeholder="Enter technique" onChange={(v) => updateReports('technique', v)} />
+            : <SelectField label="Technique" name="technique" value={rep.technique} options={techniquesByVendor[w.fracVendor] ?? []} placeholder={w.fracVendor ? 'Select technique' : 'Select a frac vendor first'} disabled={!w.fracVendor} onChange={(v) => updateReports('technique', v)} />}
         </div>
       </section>
 

@@ -61,11 +61,11 @@ export function createFracDataService(accessToken: string): FracDataService {
   };
 }
 
-export async function getCompanyWells(accessToken: string): Promise<Array<{ value: string; label: string; uwi: string | null }>> {
+export async function getCompanyWells(accessToken: string): Promise<Array<{ value: string; label: string; wellEug: string | null }>> {
   const response = await fetch(`${apiUrl}/api/companies/me/wells`, { headers: { Authorization: `Bearer ${accessToken}` } });
-  const payload = await response.json().catch(() => ({})) as { message?: string; wells?: Array<{ name: string; uwi: string | null }> };
+  const payload = await response.json().catch(() => ({})) as { message?: string; wells?: Array<{ name: string; well_eug: string | null }> };
   if (!response.ok) throw new Error(payload.message ?? 'Unable to load company wells.');
-  return (payload.wells ?? []).map((well) => ({ value: well.name, label: well.name, uwi: well.uwi }));
+  return (payload.wells ?? []).map((well) => ({ value: well.name, label: well.name, wellEug: well.well_eug }));
 }
 
 export async function getCompanyFields(accessToken: string): Promise<Array<{ value: string; label: string }>> {

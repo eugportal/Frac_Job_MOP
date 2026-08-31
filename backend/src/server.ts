@@ -9,7 +9,7 @@ import path from 'node:path';
 import { validateReportFile } from './file-validation.js';
 import { z } from 'zod';
 import { config } from './config.js';
-import { authenticateNormally, createNormalUser, deleteNormalUser, updateNormalUser, UserManagementError } from './normal-auth.js';
+import { authenticateNormally, createNormalUser, deleteNormalUser, resetNormalUserPassword, updateNormalUser, UserManagementError } from './normal-auth.js';
 import { LookupAdminError, createLookup, deleteLookup, importLookupWorkbook, listAdminLookupData, updateLookup } from './admin-lookups.js';
 import { sendOtpEmail } from './mailer.js';
 import { createOtpChallenge, verifyOtpChallenge } from './otp.js';
@@ -30,19 +30,23 @@ const otpRequest = z.object({
 const createUserRequest = z.object({
   username,
   email: z.string().trim().email().max(254).transform((value) => value.toLowerCase()),
-  password,
+  password: password.optional(),
   companyId: z.string().uuid(),
   role: z.enum(['admin', 'editor', 'viewer']).default('editor'),
+  submissionAccess: z.enum(['view', 'manage']).default('view'),
+  canViewAllSubmissions: z.boolean().default(false),
 });
+const resetPasswordRequest = z.object({ password });
 const app = express();
 
 app.disable('x-powered-by');
-app.use(helmet());
+/*app.use(helmet());
+*/
 app.use(cors({ origin: config.CORS_ORIGIN, methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], allowedHeaders: ['Authorization', 'Content-Type', 'X-Company-Id','X-File-Name'] }));
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '500mb' }));
 
-const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false });
-const adminLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 5, standardHeaders: 'draft-8', legacyHeaders: false });
+const authLimiter = rateLimit({ windowMs: 150 * 60 * 1000, limit: 500, standardHeaders: 'draft-8', legacyHeaders: false });
+const adminLimiter = rateLimit({ windowMs: 150 * 60 * 1000, limit: 500, standardHeaders: 'draft-8', legacyHeaders: false });
 
 function authenticatedSession(request: Request): SessionUser | null {
   const token = request.header('authorization')?.replace(/^Bearer\s+/i, '');
@@ -50,7 +54,7 @@ function authenticatedSession(request: Request): SessionUser | null {
   try {
     const claims = jwt.verify(token, config.JWT_SECRET, { issuer: config.JWT_ISSUER, audience: config.JWT_AUDIENCE });
     if (typeof claims !== 'object' || typeof claims.sub !== 'string' || typeof claims.uid !== 'string' || typeof claims.cid !== 'string' || typeof claims.company !== 'string' || !['admin', 'editor', 'viewer'].includes(String(claims.role))) return null;
-    return { id: claims.uid, username: claims.sub, email: typeof claims.email === 'string' ? claims.email : '', companyId: claims.cid, companyName: claims.company, role: claims.role as SessionUser['role'], isSuperuser: claims.superuser === true };
+    return { id: claims.uid, username: claims.sub, email: typeof claims.email === 'string' ? claims.email : '', companyId: claims.cid, companyName: claims.company, role: claims.role as SessionUser['role'], isSuperuser: claims.superuser === true, submissionAccess: claims.submissionAccess === 'manage' ? 'manage' : 'view', canViewAllSubmissions: claims.canViewAllSubmissions === true };
   } catch {
     return null;
   }
@@ -82,7 +86,7 @@ app.post('/api/auth/verify-otp', authLimiter, async (request, response, next) =>
 
     const sessionUser = await findSessionUser(user.username, user.email);
     if (!sessionUser) return response.status(403).json({ message: 'Your account is not assigned to a company.' });
-    const token = jwt.sign({ email: sessionUser.email, uid: sessionUser.id, cid: sessionUser.companyId, company: sessionUser.companyName, role: sessionUser.role, superuser: sessionUser.isSuperuser }, config.JWT_SECRET, {
+    const token = jwt.sign({ email: sessionUser.email, uid: sessionUser.id, cid: sessionUser.companyId, company: sessionUser.companyName, role: sessionUser.role, superuser: sessionUser.isSuperuser, submissionAccess: sessionUser.submissionAccess, canViewAllSubmissions: sessionUser.canViewAllSubmissions }, config.JWT_SECRET, {
       subject: sessionUser.username,
       expiresIn: '1h',
       issuer: config.JWT_ISSUER,
@@ -97,10 +101,12 @@ app.post('/api/auth/verify-otp', authLimiter, async (request, response, next) =>
 app.post('/api/admin/users', adminLimiter, async (request, response, next) => {
   const administrator = authenticatedSession(request);
   if (!administrator) return response.status(401).json({ message: 'Invalid or expired bearer token.' });
+  if (!administrator.isSuperuser) return response.status(403).json({ message: 'Superadmin access is required.' });
 
   try {
     const input = createUserRequest.parse(request.body);
-    const user = await createNormalUser({ ...input, createdByUsername: administrator.username });
+    if (!input.password) return response.status(400).json({ message: 'A password is required.' });
+    const user = await createNormalUser({ ...input, password: input.password, createdByUsername: administrator.username });
     return response.status(201).json({ user });
   } catch (error) {
     next(error);
@@ -121,24 +127,55 @@ app.post('/api/frac-jobs/submit', async (request, response, next) => {
   try { return response.status(201).json({ job: await saveFracJob(user, request.body, true, true) }); } catch (error) { next(error); }
 });
 
-function jobScope(user: SessionUser) { return user.isSuperuser ? { clause: '', values: [] as string[] } : { clause: ' and j.company_id = $1', values: [user.companyId] }; }
+function canViewAllSubmissions(user: SessionUser) { return user.isSuperuser || (user.role === 'admin' && user.canViewAllSubmissions); }
+function jobScope(user: SessionUser, selectedCompanyId?: string) {
+  if (canViewAllSubmissions(user)) return selectedCompanyId ? { clause: ' and j.company_id = $1', values: [selectedCompanyId] } : { clause: '', values: [] as string[] };
+  return { clause: ' and j.company_id = $1', values: [user.companyId] };
+}
 
 app.get('/api/frac-jobs/submissions', async (request, response, next) => {
   const user = authenticatedSession(request);
   if (!user) return response.status(401).json({ message: 'Invalid or expired bearer token.' });
-  const scope = jobScope(user);
+  const selectedCompanyId = typeof request.query.companyId === 'string' && /^[0-9a-f-]{36}$/i.test(request.query.companyId) ? request.query.companyId : undefined;
+  const scope = jobScope(user, selectedCompanyId);
   try {
-    const jobs = await database.query<{ id: string; reference: string | null; status: string; job_date: string | null; submitted_at: string | null; company: string; well: string | null; submitted_by: string | null }>(
-      `select j.id, j.reference, j.status, j.job_date, j.submitted_at, c.name as company, w.name as well, submitter.username as submitted_by
-         from public.frac_jobs j join public.companies c on c.id=j.company_id left join public.wells w on w.id=j.well_id left join public.app_users submitter on submitter.id=j.submitted_by
+    const jobs = await database.query<{ id: string; reference: string | null; submitted_at: string | null; well: string | null; well_eug: string | null; job_success_classification: string | null; submitted_by: string | null }>(
+      `select j.id, j.reference, j.submitted_at, w.name as well, w.well_eug, rd.workbook_data ->> 'jobSuccessClassification' as job_success_classification, submitter.username as submitted_by
+         from public.frac_jobs j left join public.job_reservoir_details rd on rd.job_id=j.id left join public.wells w on w.id=j.well_id left join public.app_users submitter on submitter.id=j.submitted_by
         where j.status = 'submitted'${scope.clause} order by j.submitted_at desc nulls last`, scope.values,
     );
     const documents = await database.query<{ job_id: string; document_type: string; original_name: string | null }>(
-      `select d.job_id, d.document_type, d.original_name from public.job_documents d join public.frac_jobs j on j.id=d.job_id where j.status='submitted'${user.isSuperuser ? '' : ' and j.company_id=$1'}`, scope.values,
+      `select d.job_id, d.document_type, d.original_name
+         from public.job_documents d
+         join public.frac_jobs j on j.id = d.job_id
+        where j.status = 'submitted'${scope.clause}`,
+      scope.values,
     );
     const byJob = new Map<string, Array<{ type: string; name: string | null }>>();
     for (const document of documents.rows) byJob.set(document.job_id, [...(byJob.get(document.job_id) ?? []), { type: document.document_type, name: document.original_name }]);
-    return response.status(200).json({ submissions: jobs.rows.map((job) => ({ ...job, documents: byJob.get(job.id) ?? [] })) });
+    return response.status(200).json({ submissions: jobs.rows.map((job) => ({ ...job, documents: byJob.get(job.id) ?? [] })), canViewAllCompanies: canViewAllSubmissions(user), canManageSubmissions: user.isSuperuser || user.submissionAccess === 'manage', selectedCompanyId: selectedCompanyId ?? null });
+  } catch (error) { next(error); }
+});
+
+app.get('/api/frac-jobs/submission-companies', async (request, response, next) => {
+  const user = authenticatedSession(request);
+  if (!user) return response.status(401).json({ message: 'Invalid or expired bearer token.' });
+  try {
+    const result = await database.query<{ id: string; name: string }>(canViewAllSubmissions(user) ? 'select id, name from public.companies order by name' : 'select id, name from public.companies where id=$1', canViewAllSubmissions(user) ? [] : [user.companyId]);
+    return response.status(200).json({ companies: result.rows, canViewAllCompanies: canViewAllSubmissions(user) });
+  } catch (error) { next(error); }
+});
+
+app.delete('/api/frac-jobs/:jobId', async (request, response, next) => {
+  const user = authenticatedSession(request);
+  if (!user) return response.status(401).json({ message: 'Invalid or expired bearer token.' });
+  if (!user.isSuperuser && user.submissionAccess !== 'manage') return response.status(403).json({ message: 'You only have view access to submissions.' });
+  const jobId = typeof request.params.jobId === 'string' ? request.params.jobId : '';
+  if (!/^[0-9a-f-]{36}$/i.test(jobId)) return response.status(400).json({ message: 'A valid job is required.' });
+  try {
+    const result = await database.query(`delete from public.frac_jobs where id=$1 and status='submitted'${canViewAllSubmissions(user) ? '' : ' and company_id=$2'} returning id`, canViewAllSubmissions(user) ? [jobId] : [jobId, user.companyId]);
+    if (!result.rows[0]) return response.status(404).json({ message: 'Submission not found.' });
+    return response.status(204).end();
   } catch (error) { next(error); }
 });
 
@@ -150,8 +187,8 @@ app.get('/api/frac-jobs/:jobId/documents/:documentType/download', async (request
   if (!/^[0-9a-f-]{36}$/i.test(jobId) || !documentTypes[documentType as keyof typeof documentTypes]) return response.status(404).json({ message: 'Document not found.' });
   try {
     const document = await database.query<{ storage_path: string | null; original_name: string | null; mime_type: string | null }>(
-      `select d.storage_path, d.original_name, d.mime_type from public.job_documents d join public.frac_jobs j on j.id=d.job_id where d.job_id=$1 and d.document_type=$2${user.isSuperuser ? '' : ' and j.company_id=$3'}`,
-      user.isSuperuser ? [jobId, documentType] : [jobId, documentType, user.companyId],
+      `select d.storage_path, d.original_name, d.mime_type from public.job_documents d join public.frac_jobs j on j.id=d.job_id where d.job_id=$1 and d.document_type=$2${canViewAllSubmissions(user) ? '' : ' and j.company_id=$3'}`,
+      canViewAllSubmissions(user) ? [jobId, documentType] : [jobId, documentType, user.companyId],
     );
     const row = document.rows[0];
     if (!row?.storage_path) return response.status(404).json({ message: 'Document not found.' });
@@ -167,7 +204,7 @@ app.get('/api/companies/me/wells', async (request, response, next) => {
   const user = authenticatedSession(request);
   if (!user) return response.status(401).json({ message: 'Invalid or expired bearer token.' });
   try {
-    const result = await database.query<{ id: string; name: string; uwi: string | null }>('select id, name, uwi from public.wells where company_id = $1 order by name', [user.companyId]);
+    const result = await database.query<{ id: string; name: string; well_eug: string | null }>('select id, name, well_eug from public.wells where company_id = $1 order by name', [user.companyId]);
     return response.status(200).json({ wells: result.rows });
   } catch (error) { next(error); }
 });
@@ -200,15 +237,19 @@ function requireSuperuser(request: Request, response: Response) {
 app.get('/api/admin/users', async (request, response, next) => {
   if (!requireSuperuser(request, response)) return;
   try {
-    const result = await database.query<{ id: string; username: string; email: string; company_id: string; company: string; role: 'admin' | 'editor' | 'viewer' }>(
-      `select u.id, u.username, u.email, m.company_id, c.name as company, m.role from public.app_users u join public.company_memberships m on m.user_id=u.id join public.companies c on c.id=m.company_id where not u.is_superuser order by c.name, u.username`,
+    const result = await database.query<{ id: string; username: string; email: string; company_id: string; company: string; role: 'admin' | 'editor' | 'viewer'; submission_access: 'view' | 'manage'; can_view_all_submissions: boolean }>(
+      `select u.id, u.username, u.email, m.company_id, c.name as company, m.role, m.submission_access, m.can_view_all_submissions from public.app_users u join public.company_memberships m on m.user_id=u.id join public.companies c on c.id=m.company_id where not u.is_superuser order by c.name, u.username`,
     );
     return response.status(200).json({ users: result.rows });
   } catch (error) { next(error); }
 });
 app.put('/api/admin/users/:id', adminLimiter, async (request, response, next) => {
   if (!requireSuperuser(request, response)) return;
-  try { const input = createUserRequest.parse(request.body); return response.status(200).json({ user: await updateNormalUser(String(request.params.id), input) }); } catch (error) { next(error); }
+  try { const input = createUserRequest.parse(request.body); return response.status(200).json({ user: await updateNormalUser(String(request.params.id), input as Parameters<typeof updateNormalUser>[1]) }); } catch (error) { next(error); }
+});
+app.post('/api/admin/users/:id/reset-password', adminLimiter, async (request, response, next) => {
+  if (!requireSuperuser(request, response)) return;
+  try { const { password: nextPassword } = resetPasswordRequest.parse(request.body); await resetNormalUserPassword(String(request.params.id), nextPassword); return response.status(204).end(); } catch (error) { next(error); }
 });
 app.delete('/api/admin/users/:id', adminLimiter, async (request, response, next) => {
   if (!requireSuperuser(request, response)) return;

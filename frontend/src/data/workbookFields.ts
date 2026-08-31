@@ -3,7 +3,7 @@
 
 import type { Option } from './dropdownOptions';
 
-export interface WorkbookField { key: string; label: string; numeric?: boolean; options?: Option[]; readonly?: boolean; unit?: string }
+export interface WorkbookField { key: string; label: string; numeric?: boolean; options?: Option[]; readonly?: boolean; required?: boolean; unit?: string }
 export interface WorkbookGroup { title?: string; fields: WorkbookField[] }
 
 const n = (key: string, label: string): WorkbookField => ({ key, label, numeric: true });
@@ -14,7 +14,7 @@ export const MAIN_WORKBOOK_GROUPS: WorkbookGroup[] = [
   { title: 'Evaluation', fields: [n('piBeforeFrac', 'PI Before Frac Job / Injectivity Index'), n('piAfterFrac', 'PI After Frac Job / Injectivity Index'), n('beforeGrossRate', 'Before: Gross Rate (BBLD)'), n('beforeNetRate', 'Before: Net Rate (BOPD)'), n('beforeWaterCut', 'Before: W.C. %'), n('beforeWhp', 'Before: WHP (PSI)'), n('afterGrossRate', 'After: Gross Rate (BBLD)'), n('afterNetRate', 'After: Net Rate (BOPD)'), n('afterWaterCut', 'After: W.C. %'), n('afterWhp', 'After: WHP (PSI)'), { ...n('foldIncreaseDeclineRate', 'Fold of Increase / Decline Rate'), readonly: true, unit: '%' }] },
   // { title: 'Main-Frac Pumping Parameters', fields: [n('averagePressure', 'Average Pressure'), n('maxPressure', 'Max Pressure'), n('averageRate', 'Average Rate'), n('maxRate', 'Max Rate'), n('hhpOnLoc', 'HHP on LOC'), n('propPumpedPercent', '% Prop Pumped / From Design'), t('gelInitial', 'Gel - Initial'), t('gelFinal', 'Gel - Final'), t('fluidSystem', 'Fluid System'), n('actualFluidVolume', 'Actual Fluid Volume'), t('propType1', 'Prop Type (1)'), t('propSize1', 'Prop Size (1)'), n('propMass1', 'Prop Mass (1) MM lb'), t('propType2', 'Prop Type (2)'), t('propSize2', 'Prop Size (2)'), n('propMass2', 'Prop Mass (2) MM lb'), n('totalPropMass', 'Total Prop Mass'), t('screenOutFlag', 'Screen-Out Flag'), n('maxProppantConc', 'Max Proppant Conc. (ppg)')] },
   // ('tbgSize', 'TBG Size'), n
-  { title: 'Comments', fields: [t('commentsNotes', 'Comments / Notes'),  { ...t('jobSuccessClassification', 'Job Success Classification'), options: [{ value: 'Success', label: 'Success' }, { value: 'Failure', label: 'Failure' }, { value: 'Partial', label: 'Partial' }] }] },
+  { title: 'Comments', fields: [t('commentsNotes', 'Comments / Notes'),  { ...t('jobSuccessClassification', 'Job Success Classification'), required: true, options: [{ value: 'Success', label: 'Success' }, { value: 'Failure', label: 'Failure' }, { value: 'Partial', label: 'Partial' }] }] },
 ];
 
 export const COMPLETION_WORKBOOK_FIELDS: WorkbookField[] = [

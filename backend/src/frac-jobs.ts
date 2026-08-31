@@ -14,11 +14,14 @@ export interface SessionUser {
   companyName: string;
   role: 'admin' | 'editor' | 'viewer';
   isSuperuser: boolean;
+  submissionAccess: 'view' | 'manage';
+  canViewAllSubmissions: boolean;
 }
 
 export async function findSessionUser(username: string, email?: string): Promise<SessionUser | null> {
   const result = await database.query<SessionUser>(
-    `select u.id, u.username, u.email, c.id as "companyId", c.name as "companyName", m.role, u.is_superuser as "isSuperuser"
+    `select u.id, u.username, u.email, c.id as "companyId", c.name as "companyName", m.role, u.is_superuser as "isSuperuser",
+            m.submission_access as "submissionAccess", m.can_view_all_submissions as "canViewAllSubmissions"
        from public.app_users u
        join public.company_memberships m on m.user_id = u.id
        join public.companies c on c.id = m.company_id
@@ -64,11 +67,14 @@ export async function saveFracJob(user: SessionUser, form: any, submit: boolean,
   const completion = form.completionData ?? {};
   const jobCost = form.jobCost ?? {};
   const jobId = typeof form.formId === 'string' && /^[0-9a-f-]{36}$/i.test(form.formId) ? form.formId : randomUUID();
+  if (submit && (typeof main.workbookFields?.jobSuccessClassification !== 'string' || !main.workbookFields.jobSuccessClassification.trim())) {
+    throw new FracJobError(400, 'Job Success Classification is required before submission.');
+  }
   const client = await database.connect();
   try {
     await client.query('begin');
     const existing = await client.query<{ id: string; status: string }>('select id, status from public.frac_jobs where id = $1', [jobId]);
-    if (existing.rows[0]?.status === 'submitted' && !allowSubmittedEdit) throw new FracJobError(409, 'Submitted forms cannot be changed.');
+    if (existing.rows[0]?.status === 'submitted' && (!allowSubmittedEdit || (!user.isSuperuser && user.submissionAccess !== 'manage'))) throw new FracJobError(403, 'You do not have permission to edit submitted forms.');
     const wellId = await requireWell(client, user.companyId, wellInfo.well);
     const fieldId = await requireField(client, user.companyId, wellInfo.field);
     const status = existing.rows[0]?.status === 'submitted' ? 'submitted' : (submit ? 'submitted' : (form.status === 'in-progress' ? 'in_progress' : 'draft'));
