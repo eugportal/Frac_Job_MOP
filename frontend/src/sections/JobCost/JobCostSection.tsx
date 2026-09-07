@@ -34,7 +34,7 @@ export function JobCostSection({ formData, setFormData }: JobCostSectionProps) {
       <div className="border-b border-ink-200 bg-brand-50 px-5 py-3"><h3 className="text-sm font-semibold text-ink-800">Job Cost</h3><p className="text-xs text-ink-500">Enter the job-level costs and operating details.</p></div>
       <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 lg:grid-cols-3">
         <NumberField placeholder='' label="Frac Cost $" name="frac-cost" value={cost.fracCost} min={0} unit="USD" onChange={(value) => update('fracCost', value)} />
-        <NumberField placeholder='' label="Fracpack Cost $" name="fracpack-cost" value={cost.fracpackCost} min={0} unit="USD" onChange={(value) => update('fracpackCost', value)} />
+        {/* <NumberField placeholder='' label="Fracpack Cost $" name="fracpack-cost" value={cost.fracpackCost} min={0} unit="USD" onChange={(value) => update('fracpackCost', value)} /> */}
         <NumberField placeholder='' label="Job Operating Days" name="job-operating-days" value={cost.jobOperatingDays} min={0} step={1} onChange={(value) => update('jobOperatingDays', value)} />
         <NumberField placeholder='' label="Job Standby Days" name="job-standby-days" value={cost.jobStandbyDays} min={0} step={1} onChange={(value) => update('jobStandbyDays', value)} />
         <RadioGroup label="Acid Considered?" name="acid-considered" value={cost.acidConsidered} onChange={(value) => setFormData((prev) => ({ ...prev, jobCost: { ...prev.jobCost, acidConsidered: value, acidCost: value ? prev.jobCost.acidCost : null } }))} />
