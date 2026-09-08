@@ -68,6 +68,17 @@ export async function getCompanyWells(accessToken: string): Promise<Array<{ valu
   return (payload.wells ?? []).map((well) => ({ value: well.name, label: well.name, wellEug: well.well_eug }));
 }
 
+export async function createCompanyWell(accessToken: string, name: string, fieldName: string): Promise<{ value: string; label: string; wellEug: string | null }> {
+  const response = await fetch(`${apiUrl}/api/companies/me/wells`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, fieldName: fieldName || undefined }),
+  });
+  const payload = await response.json().catch(() => ({})) as { message?: string; well?: { name: string; well_eug: string | null } };
+  if (!response.ok || !payload.well) throw new Error(payload.message ?? 'Unable to add the well.');
+  return { value: payload.well.name, label: payload.well.name, wellEug: payload.well.well_eug };
+}
+
 export async function getCompanyFields(accessToken: string): Promise<Array<{ value: string; label: string }>> {
   const response = await fetch(`${apiUrl}/api/companies/me/fields`, { headers: { Authorization: `Bearer ${accessToken}` } });
   const payload = await response.json().catch(() => ({})) as { message?: string; fields?: Array<{ name: string }> };

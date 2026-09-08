@@ -11,7 +11,7 @@ import { Modal } from '@/components/Modal/Modal';
 import { ConfirmationDialog } from '@/components/Modal/ConfirmationDialog';
 import { WorkbookFieldGrid } from '@/components/FormField/WorkbookFieldGrid';
 import { MAIN_WORKBOOK_GROUPS } from '@/data/workbookFields';
-import { getCompanyFields, getCompanyWells, getFracOptions } from '@/services/fracDataService';
+import { createCompanyWell, getCompanyFields, getCompanyWells, getFracOptions } from '@/services/fracDataService';
 import { generateId } from '@/utils/formatters';
 import {
   ON_OFFSHORE_OPTIONS,
@@ -42,6 +42,7 @@ export function MainFracDataSection({ accessToken, formData, setFormData, errors
   const [wellOptions, setWellOptions] = useState<Array<{ value: string; label: string; wellEug: string | null }>>([]);
   const [fieldOptions, setFieldOptions] = useState<Array<{ value: string; label: string }>>([]);
   const [techniquesByVendor, setTechniquesByVendor] = useState(TECHNIQUES_BY_FRAC_VENDOR);
+  const [wellCreateError, setWellCreateError] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -51,7 +52,7 @@ export function MainFracDataSection({ accessToken, formData, setFormData, errors
     return () => { active = false; };
   }, [accessToken]);
 
-  const err = (field: string) => (showErrors ? errorsByField.get(field)?.message : undefined);
+  const err = (field: string) => field === 'well' && wellCreateError ? wellCreateError : (showErrors ? errorsByField.get(field)?.message : undefined);
 
   const updateWellInfo = (key: keyof typeof w, value: string | number | boolean | null) => {
     setFormData((prev) => ({
@@ -69,6 +70,27 @@ export function MainFracDataSection({ accessToken, formData, setFormData, errors
         },
       },
     }));
+  };
+
+  const createWellOnBlur = async () => {
+    const enteredWell = w.well.trim();
+    if (!enteredWell) return;
+    if (wellOptions.some((option) => option.value === enteredWell)) return;
+    try {
+      const well = await createCompanyWell(accessToken, enteredWell, w.field);
+      setWellOptions((current) => current.some((option) => option.value === well.value) ? current : [...current, well].sort((a, b) => a.label.localeCompare(b.label)));
+      setWellCreateError('');
+      setFormData((prev) => prev.mainFracData.wellInfo.well.trim() !== enteredWell ? prev : ({
+        ...prev,
+        mainFracData: {
+          ...prev.mainFracData,
+          workbookFields: { ...prev.mainFracData.workbookFields, well: well.value },
+          wellInfo: { ...prev.mainFracData.wellInfo, well: well.value, wellEug: well.wellEug ?? '' },
+        },
+      }));
+    } catch (error) {
+      setWellCreateError(error instanceof Error ? error.message : 'Unable to add this well.');
+    }
   };
 
   const updateReservoir = (key: keyof typeof r, value: string | number | null) => {
@@ -132,7 +154,7 @@ export function MainFracDataSection({ accessToken, formData, setFormData, errors
       <section>
         <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-ink-500">Well Information</h3>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <TextField label="Well" name="well" value={w.well} required list="company-wells" placeholder="Search or select a well" error={err('well')} onChange={(v) => updateWellInfo('well', v)} />
+          <TextField label="Well" name="well" value={w.well} required list="company-wells" placeholder="Search or select a well" error={err('well')} onChange={(v) => { setWellCreateError(''); updateWellInfo('well', v); }} onBlur={() => void createWellOnBlur()} />
           <datalist id="company-wells">{wellOptions.map((well) => <option key={well.value} value={well.value} />)}</datalist>
           <TextField  label="Well EUG" name="wellEug" value={w.wellEug} placeholder="Matched to selected well" disabled onChange={(v) => updateWellInfo('wellEug', v)} required={false}/>
           <TextField label="Field" name="field" value={w.field} required list="company-fields" placeholder="Search or select a field" error={err('field')} onChange={(v) => updateWellInfo('field', v)} />
@@ -234,7 +256,7 @@ function DocumentUpload({ label, name, attachment, onChange }: { label: string; 
   return (
     <div className="rounded-lg border border-dashed border-brand-300 bg-brand-50 p-3">
       <label className="field-label" htmlFor={name}>{label}</label>
-      <input id={name} name={name} type="file" accept=".pdf,.doc,.docx,.xls,.xlsx" className="mt-1 block w-full text-sm text-ink-600 file:mr-3 file:rounded-md file:border-0 file:bg-brand-600 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:bg-brand-700" onChange={(event) => onChange(event.target.files?.[0] ?? null)} />
+      <input id={name} name={name} type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx" className="mt-1 block w-full text-sm text-ink-600 file:mr-3 file:rounded-md file:border-0 file:bg-brand-600 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:bg-brand-700" onChange={(event) => onChange(event.target.files?.[0] ?? null)} />
       {attachment && <p className="mt-2 text-xs font-medium text-accent-700">Attached: {attachment.name} ({Math.ceil(attachment.size / 1024)} KB)</p>}
     </div>
   );

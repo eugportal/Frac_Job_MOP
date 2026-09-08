@@ -45,11 +45,19 @@ function withoutRemovedWorkbookFields(value: unknown) {
   return Object.fromEntries(Object.entries(value).filter(([key]) => !removedWorkbookKeys.has(key)));
 }
 
-async function requireWell(client: PoolClient, companyId: string, wellName: unknown) {
+async function requireWell(client: PoolClient, companyId: string, wellName: unknown, fieldId: string | null) {
   if (typeof wellName !== 'string' || !wellName.trim()) return null;
-  const result = await client.query<{ id: string }>('select id from public.wells where company_id = $1 and name = $2', [companyId, wellName]);
-  if (!result.rows[0]) throw new FracJobError(400, 'The selected well does not belong to your company.');
-  return result.rows[0].id;
+  const name = wellName.trim();
+  const result = await client.query<{ id: string }>(
+    `insert into public.wells (company_id, field_id, name)
+     values ($1, $2, $3)
+     on conflict (company_id, name) do update set
+       field_id = coalesce(public.wells.field_id, excluded.field_id),
+       updated_at = now()
+     returning id`,
+    [companyId, fieldId, name],
+  );
+  return result.rows[0]?.id ?? null;
 }
 
 async function requireField(client: PoolClient, companyId: string, fieldName: unknown) {
@@ -75,8 +83,8 @@ export async function saveFracJob(user: SessionUser, form: any, submit: boolean,
     await client.query('begin');
     const existing = await client.query<{ id: string; status: string }>('select id, status from public.frac_jobs where id = $1', [jobId]);
     if (existing.rows[0]?.status === 'submitted' && (!allowSubmittedEdit || (!user.isSuperuser && user.submissionAccess !== 'manage'))) throw new FracJobError(403, 'You do not have permission to edit submitted forms.');
-    const wellId = await requireWell(client, user.companyId, wellInfo.well);
     const fieldId = await requireField(client, user.companyId, wellInfo.field);
+    const wellId = await requireWell(client, user.companyId, wellInfo.well, fieldId);
     const status = existing.rows[0]?.status === 'submitted' ? 'submitted' : (submit ? 'submitted' : (form.status === 'in-progress' ? 'in_progress' : 'draft'));
     const job = await client.query<{ id: string; reference: string | null; submitted_at: string | null }>(
       `insert into public.frac_jobs (id, company_id, well_id, field_id, status, job_date, submitted_at, submitted_by, created_by,

@@ -37,6 +37,10 @@ const createUserRequest = z.object({
   canViewAllSubmissions: z.boolean().default(false),
 });
 const resetPasswordRequest = z.object({ password });
+const createCompanyWellRequest = z.object({
+  name: z.string().trim().min(1).max(255),
+  fieldName: z.string().trim().max(255).optional(),
+});
 const app = express();
 
 app.disable('x-powered-by');
@@ -209,6 +213,28 @@ app.get('/api/companies/me/wells', async (request, response, next) => {
   } catch (error) { next(error); }
 });
 
+app.post('/api/companies/me/wells', async (request, response, next) => {
+  const user = authenticatedSession(request);
+  if (!user) return response.status(401).json({ message: 'Invalid or expired bearer token.' });
+  if (user.role === 'viewer') return response.status(403).json({ message: 'Viewers cannot create wells.' });
+  try {
+    const { name, fieldName } = createCompanyWellRequest.parse(request.body);
+    const field = fieldName
+      ? await database.query<{ id: string }>('select id from public.fields where company_id=$1 and name=$2', [user.companyId, fieldName])
+      : { rows: [] as Array<{ id: string }> };
+    const result = await database.query<{ id: string; name: string; well_eug: string | null }>(
+      `insert into public.wells (company_id, field_id, name)
+       values ($1, $2, $3)
+       on conflict (company_id, name) do update set
+         field_id = coalesce(public.wells.field_id, excluded.field_id),
+         updated_at = now()
+       returning id, name, well_eug`,
+      [user.companyId, field.rows[0]?.id ?? null, name],
+    );
+    return response.status(201).json({ well: result.rows[0] });
+  } catch (error) { next(error); }
+});
+
 app.get('/api/companies/me/fields', async (request, response, next) => {
   const user = authenticatedSession(request);
   if (!user) return response.status(401).json({ message: 'Invalid or expired bearer token.' });
@@ -331,6 +357,39 @@ app.post('/api/frac-jobs/:jobId/documents/:documentType', reportUpload.single('r
     return response.status(201).json({ storagePath, fileName });
   } catch (error) { next(error); }
 });
+
+// app.post(
+//   '/api/frac-jobs/:jobId/documents/:documentType',
+//   reportUpload.array('reportFiles', 20),
+//   async (request, response, next) => {
+//     const user = authenticatedSession(request);
+
+//     if (!user) {
+//       return response.status(401).json({ message: 'Invalid or expired bearer token.' });
+//     }
+
+//     if (user.role === 'viewer') {
+//       return response.status(403).json({ message: 'Viewers cannot upload documents.' });
+//     }
+
+//     const jobId = typeof request.params.jobId === 'string' ? request.params.jobId : '';
+//     const documentType = request.params.documentType as keyof typeof documentTypes;
+//     const reportFiles = request.files as Express.Multer.File[];
+
+//     if (
+//       !documentTypes[documentType] ||
+//       !/^[0-9a-f-]{36}$/i.test(jobId) ||
+//       !reportFiles?.length
+//     ) {
+//       return response.status(400).json({
+//         message: 'At least one report file is required.',
+//       });
+//     }
+
+//     // process reportFiles...
+//   }
+// );
+
 
 app.get('/api/auth/me', (request, response) => {
   const token = request.header('authorization')?.replace(/^Bearer\s+/i, '');

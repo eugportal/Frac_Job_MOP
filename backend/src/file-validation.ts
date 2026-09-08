@@ -8,7 +8,7 @@ const MAX_UNCOMPRESSED_BYTES = 100 * 1024 * 1024;
 
 export async function validateReportFile(fileName: string, content: Buffer) {
   const extension = path.extname(fileName).toLowerCase();
-  if (!['.pdf', '.doc', '.docx', '.xls', '.xlsx'].includes(extension)) throw new Error('Only PDF, DOC, DOCX, XLS, and XLSX report files are allowed.');
+  if (!['.pdf', '.doc', '.docx', '.xls', '.xlsx','.zip'].includes(extension)) throw new Error('Only PDF, DOC, DOCX, XLS, and XLSX report files are allowed.');
   if (content.length === 0) throw new Error('The uploaded file is empty.');
   if (extension === '.pdf') {
     if (!content.subarray(0, 5).equals(Buffer.from('%PDF-'))) throw new Error('The file is not a valid PDF document.');
